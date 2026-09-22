@@ -34,7 +34,8 @@ export async function reserveAppointment(input: {
     throw new AppointmentConflictError("slot_unavailable");
   }
 
-  return createAppointment({
+  try {
+    return await createAppointment({
     customerId: input.customerId,
     vehicleId: input.vehicleId,
     serviceId: input.serviceId,
@@ -47,5 +48,18 @@ export async function reserveAppointment(input: {
     servicePostalCode: input.servicePostalCode,
     quotedPriceCents: quote.totalCents,
     notes: input.notes,
-  });
+    });
+  } catch (error) {
+    // PostgreSQL exclusion_violation: another request reserved the slot
+    // after our optimistic availability check but before this insert.
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: string }).code === "23P01"
+    ) {
+      throw new AppointmentConflictError("slot_unavailable");
+    }
+    throw error;
+  }
 }
