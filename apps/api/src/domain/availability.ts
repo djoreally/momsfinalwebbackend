@@ -1,13 +1,16 @@
+import { Temporal } from "@js-temporal/polyfill";
 import { getService } from "../repositories/services";
 import { hasAppointmentConflict } from "../repositories/availability";
 
 const SLOT_MINUTES = 30;
 const OPEN_HOUR = 8;
 const CLOSE_HOUR = 17;
+const TIME_ZONE = "America/New_York";
 
 function atLocalHour(date: string, hour: number) {
-  // Scheduling policy is currently fixed to MOMS' operating timezone.
-  return new Date(`${date}T${String(hour).padStart(2, "0")}:00:00-04:00`);
+  return Temporal.ZonedDateTime.from(
+    `${date}T${String(hour).padStart(2, "0")}:00:00[${TIME_ZONE}]`,
+  );
 }
 
 export async function getAvailability(input: {
@@ -19,14 +22,21 @@ export async function getAvailability(input: {
 
   const open = atLocalHour(input.date, OPEN_HOUR);
   const close = atLocalHour(input.date, CLOSE_HOUR);
-  const durationMs = service.defaultDurationMinutes * 60_000;
   const slots = [];
 
-  for (let cursor = open.getTime(); cursor + durationMs <= close.getTime(); cursor += SLOT_MINUTES * 60_000) {
-    const start = new Date(cursor);
-    const end = new Date(cursor + durationMs);
-    if (!(await hasAppointmentConflict(start, end))) {
-      slots.push({ start: start.toISOString(), end: end.toISOString() });
+  for (
+    let cursor = open;
+    Temporal.ZonedDateTime.compare(
+      cursor.add({ minutes: service.defaultDurationMinutes }),
+      close,
+    ) <= 0;
+    cursor = cursor.add({ minutes: SLOT_MINUTES })
+  ) {
+    const end = cursor.add({ minutes: service.defaultDurationMinutes });
+    const startDate = new Date(cursor.epochMilliseconds);
+    const endDate = new Date(end.epochMilliseconds);
+    if (!(await hasAppointmentConflict(startDate, endDate))) {
+      slots.push({ start: startDate.toISOString(), end: endDate.toISOString() });
     }
   }
 
@@ -34,7 +44,7 @@ export async function getAvailability(input: {
     serviceId: service.id,
     date: input.date,
     durationMinutes: service.defaultDurationMinutes,
-    timezone: "America/New_York",
+    timezone: TIME_ZONE,
     slots,
   };
 }
