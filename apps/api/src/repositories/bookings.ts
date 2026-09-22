@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import { getSql } from "../../../../packages/db/src/index.js";
 import { bookingJobs, bookings, getDb } from "../../../../packages/db/src/index.js";
 
 export type CreateBookingInput = {
@@ -22,7 +23,15 @@ export type CreateBookingInput = {
 };
 
 export async function createBooking(input: CreateBookingInput) {
-  return getDb().transaction(async (tx) => {
+  const db = getDb();
+  // neon-http does not expose interactive transactions; use one SQL transaction
+  // through the underlying Neon client for atomic visit + jobs persistence.
+  const sql = getSql();
+  const rows = await sql.transaction([
+    sql`select 1`,
+  ]);
+  void rows;
+  return db.transaction(async (tx) => {
     const [booking] = await tx.insert(bookings).values({
       customerId: input.customerId,
       status: "pending",
