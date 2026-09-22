@@ -174,9 +174,8 @@ export const payments = momsOps.table(
   "payments",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    appointmentId: uuid("appointment_id")
-      .notNull()
-      .references(() => appointments.id, { onDelete: "restrict" }),
+    appointmentId: uuid("appointment_id").references(() => appointments.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "restrict" }),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     status: text("status").default("pending").notNull(),
     amountCents: integer("amount_cents").notNull(),
@@ -187,6 +186,8 @@ export const payments = momsOps.table(
   },
   (table) => [
     index("payments_appointment_idx").on(table.appointmentId),
+    index("payments_booking_idx").on(table.bookingId),
+    uniqueIndex("payments_booking_unique").on(table.bookingId),
     uniqueIndex("payments_stripe_payment_intent_unique").on(table.stripePaymentIntentId),
   ],
 );
