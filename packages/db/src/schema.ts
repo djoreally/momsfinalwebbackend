@@ -88,6 +88,54 @@ export const services = momsOps.table(
   (table) => [uniqueIndex("services_slug_unique").on(table.slug)],
 );
 
+export const bookings = momsOps.table(
+  "bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+    status: text("status").default("pending").notNull(),
+    scheduledStart: timestamp("scheduled_start", { withTimezone: true }).notNull(),
+    scheduledEnd: timestamp("scheduled_end", { withTimezone: true }).notNull(),
+    serviceAddressLine1: text("service_address_line_1").notNull(),
+    serviceAddressLine2: text("service_address_line_2"),
+    serviceCity: text("service_city").notNull(),
+    serviceState: text("service_state").notNull(),
+    servicePostalCode: text("service_postal_code").notNull(),
+    quotedTotalCents: integer("quoted_total_cents").default(0).notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("bookings_customer_idx").on(table.customerId),
+    index("bookings_schedule_idx").on(table.scheduledStart),
+    index("bookings_status_idx").on(table.status),
+  ],
+);
+
+export const bookingJobs = momsOps.table(
+  "booking_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+    vehicleId: uuid("vehicle_id").notNull().references(() => vehicles.id, { onDelete: "restrict" }),
+    serviceId: uuid("service_id").notNull().references(() => services.id, { onDelete: "restrict" }),
+    quotedPriceCents: integer("quoted_price_cents").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    position: integer("position").default(0).notNull(),
+    status: text("status").default("pending").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("booking_jobs_booking_idx").on(table.bookingId),
+    index("booking_jobs_vehicle_idx").on(table.vehicleId),
+    index("booking_jobs_service_idx").on(table.serviceId),
+    uniqueIndex("booking_jobs_booking_vehicle_service_unique").on(table.bookingId, table.vehicleId, table.serviceId),
+  ],
+);
+
 export const appointments = momsOps.table(
   "appointments",
   {
