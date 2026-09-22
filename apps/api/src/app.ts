@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { databaseHealth } from "@moms/db";
+import { databaseHealth } from "../../../packages/db/src/index.js";
 import { appointmentRoutes } from "./routes/appointments";
 import { availabilityRoutes } from "./routes/availability";
 import { customerRoutes } from "./routes/customers";
