@@ -1,0 +1,1 @@
+{"name":"@moms/api","private":true,"type":"module","scripts":{"build":"tsc --noEmit","typecheck":"tsc --noEmit"},"dependencies":{"@moms/db":"workspace:*","hono":"^4.9.7","zod":"^4.1.8"},"devDependencies":{"@types/node":"^24.5.2","typescript":"^5.9.2"}}
