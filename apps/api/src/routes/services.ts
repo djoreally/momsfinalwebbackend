@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getService, listActiveServices } from "../repositories/services";
+import { getService, listActiveServices } from "../repositories/services.js";
 
 export const serviceRoutes = new Hono();
 
