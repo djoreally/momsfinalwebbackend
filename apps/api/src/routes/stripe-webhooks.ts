@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { getStripe } from "../integrations/stripe";
-import { updatePaymentStatusByIntent } from "../repositories/payments";
+import { getStripe } from "../integrations/stripe.js";
+import { updatePaymentStatusByIntent } from "../repositories/payments.js";
 
 export const stripeWebhookRoutes = new Hono();
 
