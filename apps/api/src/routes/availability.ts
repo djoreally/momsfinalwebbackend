@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { getAvailability } from "../domain/availability";
+import { getAvailability } from "../domain/availability.js";
 
 const requestSchema = z.object({
   serviceId: z.string().uuid(),
