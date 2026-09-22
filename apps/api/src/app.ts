@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { databaseHealth } from "@moms/db";
 import { appointmentRoutes } from "./routes/appointments";
 import { availabilityRoutes } from "./routes/availability";
@@ -9,6 +10,18 @@ import { stripeWebhookRoutes } from "./routes/stripe-webhooks";
 import { serviceRoutes } from "./routes/services";
 
 export const app = new Hono();
+
+app.use("/v1/*", cors({
+  origin: (origin) => {
+    if (!origin) return "https://momsoilchange.com";
+    if (origin === "https://momsoilchange.com" || origin === "https://www.momsoilchange.com") return origin;
+    if (/^https:\/\/[^/]+\.vercel\.app$/.test(origin)) return origin;
+    return "https://momsoilchange.com";
+  },
+  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowHeaders: ["Content-Type"],
+  maxAge: 86400,
+}));
 
 app.get("/", (c) =>
   c.json({
