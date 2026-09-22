@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { databaseHealth } from "@moms/db";
+import { customerRoutes } from "./routes/customers";
 
 export const app = new Hono();
 
@@ -28,3 +29,5 @@ app.get("/health/database", async (c) => {
     return c.json({ status: "error", database: "unreachable" }, 503);
   }
 });
+
+app.route("/v1/customers", customerRoutes);
