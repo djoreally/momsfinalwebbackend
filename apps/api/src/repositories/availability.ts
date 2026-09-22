@@ -1,5 +1,5 @@
 import { and, lt, gt, inArray } from "drizzle-orm";
-import { appointments, getDb } from "@moms/db";
+import { appointments, getDb } from "../../../../packages/db/src/index.js";
 
 const blockingStatuses = ["pending", "confirmed", "in_progress"];
 
