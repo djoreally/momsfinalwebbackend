@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { databaseHealth } from "@moms/db";
 
 export const app = new Hono();
 
@@ -17,3 +18,13 @@ app.get("/health", (c) =>
     timestamp: new Date().toISOString(),
   }),
 );
+
+app.get("/health/database", async (c) => {
+  try {
+    await databaseHealth();
+    return c.json({ status: "ok", database: "reachable" });
+  } catch (error) {
+    console.error("Database health check failed", error);
+    return c.json({ status: "error", database: "unreachable" }, 503);
+  }
+});
