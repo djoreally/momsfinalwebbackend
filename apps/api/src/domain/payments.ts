@@ -1,8 +1,8 @@
-import { getStripe } from "../integrations/stripe";
-import { calculateTax } from "./tax";
-import { getAppointment } from "../repositories/appointments";
-import { getCustomer, setStripeCustomerId } from "../repositories/customer-vehicle";
-import { createPayment, attachPaymentIntent, getPaymentByAppointment } from "../repositories/payments";
+import { getStripe } from "../integrations/stripe.js";
+import { calculateTax } from "./tax.js";
+import { getAppointment } from "../repositories/appointments.js";
+import { getCustomer, setStripeCustomerId } from "../repositories/customer-vehicle.js";
+import { createPayment, attachPaymentIntent, getPaymentByAppointment } from "../repositories/payments.js";
 
 export async function prepareAppointmentPayment(appointmentId: string) {
   const appointment = await getAppointment(appointmentId);
