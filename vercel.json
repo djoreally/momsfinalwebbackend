@@ -1,10 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm --filter @moms/api build",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/apps/api/api"
-    }
-  ]
+  "outputDirectory": ".vercel/output"
 }
