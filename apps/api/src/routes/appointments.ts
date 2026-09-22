@@ -4,8 +4,8 @@ import {
   AppointmentConflictError,
   AppointmentValidationError,
   reserveAppointment,
-} from "../domain/appointments";
-import { getAppointment } from "../repositories/appointments";
+} from "../domain/appointments.js";
+import { getAppointment } from "../repositories/appointments.js";
 
 const createInput = z.object({
   customerId: z.string().uuid(),
