@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDb, payments } from "@moms/db";
+import { getDb, payments } from "../../../../packages/db/src/index.js";
 
 export async function createPayment(input: { appointmentId: string; amountCents: number }) {
   const [payment] = await getDb().insert(payments).values({
