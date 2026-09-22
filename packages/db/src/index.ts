@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import * as schema from "./schema";
+import * as schema from "./schema.js";
 
 let client: ReturnType<typeof neon> | undefined;
 let database: ReturnType<typeof drizzle<typeof schema>> | undefined;
@@ -25,4 +25,4 @@ export async function databaseHealth(): Promise<void> {
   await getSql()`select 1 as ok`;
 }
 
-export * from "./schema";
+export * from "./schema.js";
