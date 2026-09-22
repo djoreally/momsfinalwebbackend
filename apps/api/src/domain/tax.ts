@@ -1,4 +1,4 @@
-import { getStripe } from "../integrations/stripe";
+import { getStripe } from "../integrations/stripe.js";
 
 export type TaxAddress = {
   line1: string;
