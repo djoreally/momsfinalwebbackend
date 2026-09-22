@@ -1,1 +1,19 @@
-{"name":"moms-platform","private":true,"packageManager":"pnpm@10.17.1","scripts":{"build":"pnpm --filter @moms/api build","typecheck":"pnpm -r typecheck"},"devDependencies":{"typescript":"^5.9.2"}}
+{
+  "name": "moms-platform",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "build": "pnpm --filter @moms/api build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.1",
+    "drizzle-orm": "^0.44.5",
+    "hono": "^4.9.7",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}
