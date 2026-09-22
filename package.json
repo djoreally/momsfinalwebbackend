@@ -10,7 +10,8 @@
     "drizzle-orm": "^0.44.5",
     "hono": "^4.9.7",
     "zod": "^4.1.8",
-    "stripe": "^18.5.0"
+    "stripe": "^18.5.0",
+    "@js-temporal/polyfill": "^0.5.1"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
