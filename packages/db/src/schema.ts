@@ -75,6 +75,8 @@ export const services = momsOps.table(
     name: text("name").notNull(),
     description: text("description"),
     basePriceCents: integer("base_price_cents").notNull(),
+    includedQuarts: numeric("included_quarts", { precision: 5, scale: 2 }),
+    extraQuartPriceCents: integer("extra_quart_price_cents"),
     defaultDurationMinutes: integer("default_duration_minutes").notNull(),
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
