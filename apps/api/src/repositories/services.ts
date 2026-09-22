@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { getDb, services } from "@moms/db";
+import { getDb, services } from "../../../../packages/db/src/index.js";
 
 export async function listActiveServices() {
   return getDb()
