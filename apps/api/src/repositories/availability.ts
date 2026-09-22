@@ -1,4 +1,4 @@
-import { and, lt, gt, notInArray } from "drizzle-orm";
+import { and, lt, gt, inArray } from "drizzle-orm";
 import { appointments, getDb } from "@moms/db";
 
 const blockingStatuses = ["pending", "confirmed", "in_progress"];
@@ -11,7 +11,7 @@ export async function hasAppointmentConflict(start: Date, end: Date) {
       and(
         lt(appointments.scheduledStart, end),
         gt(appointments.scheduledEnd, start),
-        notInArray(appointments.status, ["cancelled", "cannot_complete"]),
+        inArray(appointments.status, blockingStatuses),
       ),
     )
     .limit(1);
