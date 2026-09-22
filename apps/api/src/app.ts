@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { databaseHealth } from "@moms/db";
 import { customerRoutes } from "./routes/customers";
+import { serviceRoutes } from "./routes/services";
 
 export const app = new Hono();
 
@@ -31,3 +32,4 @@ app.get("/health/database", async (c) => {
 });
 
 app.route("/v1/customers", customerRoutes);
+app.route("/v1/services", serviceRoutes);
