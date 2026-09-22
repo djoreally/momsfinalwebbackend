@@ -1,7 +1,7 @@
 import { getStripe } from "../integrations/stripe";
 import { calculateTax } from "./tax";
 import { getAppointment } from "../repositories/appointments";
-import { getCustomer } from "../repositories/customer-vehicle";
+import { getCustomer, setStripeCustomerId } from "../repositories/customer-vehicle";
 import { createPayment, attachPaymentIntent, getPaymentByAppointment } from "../repositories/payments";
 
 export async function prepareAppointmentPayment(appointmentId: string) {
@@ -24,6 +24,7 @@ export async function prepareAppointmentPayment(appointmentId: string) {
       metadata: { moms_customer_id: customer.id },
     }, { idempotencyKey: `moms-customer-${customer.id}` });
     stripeCustomerId = stripeCustomer.id;
+    await setStripeCustomerId(customer.id, stripeCustomerId);
   }
 
   const tax = await calculateTax({
