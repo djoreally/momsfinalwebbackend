@@ -80,3 +80,41 @@ export async function quoteService(input: {
     pricingVersion: "moms-v2",
   };
 }
+
+
+export async function previewServicePrice(input: {
+  serviceId: string;
+  oilCapacityQuarts?: number | null;
+}) {
+  const service = await getService(input.serviceId);
+  if (!service || !service.active) return null;
+
+  const capacity = input.oilCapacityQuarts ?? null;
+  const included = service.includedQuarts === null ? null : Number(service.includedQuarts);
+  const extraQuarts =
+    capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
+  const extraQuartChargeCents =
+    service.extraQuartPriceCents === null ? 0 : Math.round(extraQuarts * service.extraQuartPriceCents);
+  const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
+  const processingFeePercent = Number(service.processingFeePercent);
+  const processingFeeCents = centsForPercent(serviceSubtotalCents, processingFeePercent);
+  const totalCents = serviceSubtotalCents + processingFeeCents;
+
+  return {
+    serviceId: service.id,
+    currency: "usd" as const,
+    basePriceCents: service.basePriceCents,
+    oilCapacityQuarts: capacity,
+    includedQuarts: included,
+    extraQuarts,
+    extraQuartPriceCents: service.extraQuartPriceCents,
+    extraQuartChargeCents,
+    processingFeePercent,
+    processingFeeCents,
+    preTaxTotalCents: totalCents,
+    totalCents,
+    durationMinutes: service.defaultDurationMinutes,
+    pricingVersion: "moms-v2" as const,
+    isExact: capacity !== null || service.includedQuarts === null,
+  };
+}
