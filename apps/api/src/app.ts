@@ -4,6 +4,7 @@ import { appointmentRoutes } from "./routes/appointments";
 import { availabilityRoutes } from "./routes/availability";
 import { customerRoutes } from "./routes/customers";
 import { pricingRoutes } from "./routes/pricing";
+import { paymentRoutes } from "./routes/payments";
 import { serviceRoutes } from "./routes/services";
 
 export const app = new Hono();
@@ -39,3 +40,4 @@ app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
 app.route("/v1/services", serviceRoutes);
 app.route("/v1/pricing", pricingRoutes);
+app.route("/v1/payments", paymentRoutes);
