@@ -1,5 +1,5 @@
 import { and, desc, eq, or } from "drizzle-orm";
-import { customers, getDb, vehicles } from "@moms/db";
+import { customers, getDb, vehicles } from "../../../../packages/db/src/index.js";
 
 export type CreateCustomerInput = {
   firstName: string;
