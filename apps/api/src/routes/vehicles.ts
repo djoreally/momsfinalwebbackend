@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { decodeVin, listMakes, listModels } from "../integrations/nhtsa";
+import { decodeVin, listMakes, listModels } from "../integrations/nhtsa.js";
 
 export const vehicleRoutes = new Hono();
 
