@@ -1,5 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @moms/api build",
-  "outputDirectory": ".vercel/output"
+  "framework": null
 }
