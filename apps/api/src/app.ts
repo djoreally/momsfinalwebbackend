@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { databaseHealth } from "@moms/db";
+import { appointmentRoutes } from "./routes/appointments";
 import { availabilityRoutes } from "./routes/availability";
 import { customerRoutes } from "./routes/customers";
 import { pricingRoutes } from "./routes/pricing";
@@ -33,6 +34,7 @@ app.get("/health/database", async (c) => {
   }
 });
 
+app.route("/v1/appointments", appointmentRoutes);
 app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
 app.route("/v1/services", serviceRoutes);
