@@ -31,12 +31,14 @@ export const customers = momsOps.table(
     state: text("state"),
     postalCode: text("postal_code"),
     marketingConsent: boolean("marketing_consent").default(false).notNull(),
+    stripeCustomerId: text("stripe_customer_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("customers_phone_idx").on(table.phone),
     index("customers_email_idx").on(table.email),
+    uniqueIndex("customers_stripe_customer_unique").on(table.stripeCustomerId),
   ],
 );
 
