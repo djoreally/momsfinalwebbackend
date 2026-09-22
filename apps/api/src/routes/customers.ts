@@ -6,7 +6,7 @@ import {
   findCustomer,
   getCustomer,
   listCustomerVehicles,
-} from "../repositories/customer-vehicle";
+} from "../repositories/customer-vehicle.js";
 
 const customerInput = z.object({
   firstName: z.string().trim().min(1).max(100),
