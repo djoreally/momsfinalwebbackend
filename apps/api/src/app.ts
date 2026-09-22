@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { databaseHealth } from "../../../packages/db/src/index.js";
 import { appointmentRoutes } from "./routes/appointments.js";
+import { bookingRoutes } from "./routes/bookings.js";
 import { availabilityRoutes } from "./routes/availability.js";
 import { customerRoutes } from "./routes/customers.js";
 import { pricingRoutes } from "./routes/pricing.js";
@@ -51,6 +52,7 @@ app.get("/health/database", async (c) => {
 });
 
 app.route("/v1/appointments", appointmentRoutes);
+app.route("/v1/bookings", bookingRoutes);
 app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
 app.route("/v1/services", serviceRoutes);
