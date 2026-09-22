@@ -8,6 +8,7 @@ import { pricingRoutes } from "./routes/pricing";
 import { paymentRoutes } from "./routes/payments";
 import { stripeWebhookRoutes } from "./routes/stripe-webhooks";
 import { serviceRoutes } from "./routes/services";
+import { vehicleRoutes } from "./routes/vehicles";
 
 export const app = new Hono();
 
@@ -53,6 +54,7 @@ app.route("/v1/appointments", appointmentRoutes);
 app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
 app.route("/v1/services", serviceRoutes);
+app.route("/v1/vehicles", vehicleRoutes);
 app.route("/v1/pricing", pricingRoutes);
 app.route("/v1/payments", paymentRoutes);
 app.route("/webhooks/stripe", stripeWebhookRoutes);
