@@ -47,6 +47,15 @@ export async function getCustomer(customerId: string) {
   return customer ?? null;
 }
 
+export async function setStripeCustomerId(customerId: string, stripeCustomerId: string) {
+  const [customer] = await getDb()
+    .update(customers)
+    .set({ stripeCustomerId, updatedAt: new Date() })
+    .where(eq(customers.id, customerId))
+    .returning();
+  return customer ?? null;
+}
+
 export type CreateVehicleInput = {
   customerId: string;
   vin?: string | null;
