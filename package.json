@@ -3,7 +3,6 @@
   "private": true,
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "build": "pnpm --filter @moms/api build",
     "typecheck": "pnpm -r typecheck"
   },
   "dependencies": {
