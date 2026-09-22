@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { prepareAppointmentPayment } from "../domain/payments";
+import { prepareAppointmentPayment } from "../domain/payments.js";
 
 export const paymentRoutes = new Hono();
 
