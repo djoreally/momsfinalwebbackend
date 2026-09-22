@@ -1,6 +1,6 @@
-import { quoteService } from "./pricing";
-import { hasAppointmentConflict } from "../repositories/availability";
-import { createAppointment } from "../repositories/appointments";
+import { quoteService } from "./pricing.js";
+import { hasAppointmentConflict } from "../repositories/availability.js";
+import { createAppointment } from "../repositories/appointments.js";
 
 export class AppointmentConflictError extends Error {}
 export class AppointmentValidationError extends Error {}
