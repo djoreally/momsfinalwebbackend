@@ -6,24 +6,31 @@ export type PriceQuote = {
   vehicleId: string;
   currency: "usd";
   basePriceCents: number;
-  vehicleAdjustmentCents: number;
-  subtotalCents: number;
+  oilCapacityQuarts: number | null;
+  includedQuarts: number | null;
+  extraQuarts: number;
+  extraQuartPriceCents: number | null;
+  extraQuartChargeCents: number;
+  extraQuartWaived: boolean;
+  processingFeePercent: number;
+  processingFeeCents: number;
+  processingFeeWaived: boolean;
+  preTaxTotalCents: number;
   totalCents: number;
   durationMinutes: number;
-  pricingVersion: "moms-v1";
+  pricingVersion: "moms-v2";
 };
 
-/**
- * Server-authoritative pricing boundary.
- *
- * v1 deliberately applies no inferred vehicle surcharge. We will only add
- * adjustments backed by explicit MOMS pricing rules/data. This prevents the
- * frontend from inventing prices while the detailed oil/filter rules are built.
- */
+function centsForPercent(amountCents: number, percent: number) {
+  return Math.round(amountCents * (percent / 100));
+}
+
 export async function quoteService(input: {
   customerId: string;
   vehicleId: string;
   serviceId: string;
+  waiveExtraQuarts?: boolean;
+  waiveProcessingFee?: boolean;
 }): Promise<PriceQuote | null> {
   const [vehicle, service] = await Promise.all([
     findVehicleForCustomer(input.customerId, input.vehicleId),
@@ -32,18 +39,44 @@ export async function quoteService(input: {
 
   if (!vehicle || !service || !service.active) return null;
 
-  const vehicleAdjustmentCents = 0;
-  const subtotalCents = service.basePriceCents + vehicleAdjustmentCents;
+  const capacity = vehicle.oilCapacityQuarts === null ? null : Number(vehicle.oilCapacityQuarts);
+  const included = service.includedQuarts === null ? null : Number(service.includedQuarts);
+  const extraQuarts =
+    capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
+
+  const extraQuartWaived = Boolean(input.waiveExtraQuarts && service.extraQuartWaivable);
+  const extraQuartChargeCents =
+    extraQuartWaived || service.extraQuartPriceCents === null
+      ? 0
+      : Math.round(extraQuarts * service.extraQuartPriceCents);
+
+  const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
+  const processingFeePercent = Number(service.processingFeePercent);
+  const processingFeeWaived = Boolean(
+    input.waiveProcessingFee && service.processingFeeWaivable,
+  );
+  const processingFeeCents = processingFeeWaived
+    ? 0
+    : centsForPercent(serviceSubtotalCents, processingFeePercent);
+  const preTaxTotalCents = serviceSubtotalCents + processingFeeCents;
 
   return {
     serviceId: service.id,
     vehicleId: vehicle.id,
     currency: "usd",
     basePriceCents: service.basePriceCents,
-    vehicleAdjustmentCents,
-    subtotalCents,
-    totalCents: subtotalCents,
+    oilCapacityQuarts: capacity,
+    includedQuarts: included,
+    extraQuarts,
+    extraQuartPriceCents: service.extraQuartPriceCents,
+    extraQuartChargeCents,
+    extraQuartWaived,
+    processingFeePercent,
+    processingFeeCents,
+    processingFeeWaived,
+    preTaxTotalCents,
+    totalCents: preTaxTotalCents,
     durationMinutes: service.defaultDurationMinutes,
-    pricingVersion: "moms-v1",
+    pricingVersion: "moms-v2",
   };
 }
