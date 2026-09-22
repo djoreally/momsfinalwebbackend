@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { getService } from "../repositories/services";
-import { hasAppointmentConflict } from "../repositories/availability";
+import { getService } from "../repositories/services.js";
+import { hasAppointmentConflict } from "../repositories/availability.js";
 
 const SLOT_MINUTES = 30;
 const OPEN_HOUR = 8;
