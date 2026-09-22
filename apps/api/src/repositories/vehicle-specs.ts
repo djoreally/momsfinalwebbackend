@@ -1,4 +1,4 @@
-import { getVehicleSpecsSql } from "../../../packages/db/src/index.js";
+import { getVehicleSpecsSql } from "../../../../packages/db/src/index.js";
 
 export type VehicleOilSpec = {
   id: number;
