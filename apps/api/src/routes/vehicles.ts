@@ -6,6 +6,29 @@ import { listSpecYears, listSpecMakes, listSpecModels, listSpecEngines, resolveV
 export const vehicleRoutes = new Hono();
 const yearSchema = z.coerce.number().int().min(1999).max(2027);
 
+function normalizeOilCapacityQuarts(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.trim().match(/(\d+(?:\.\d+)?)\s*(liters?|litres?|l|quarts?|qts?)/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const unit = match[2].toLowerCase();
+  const quarts = unit.startsWith("l") ? amount * 1.05668821 : amount;
+  return Math.round(quarts * 100) / 100;
+}
+
+function toBookingVehicleSpec(spec: Awaited<ReturnType<typeof resolveVehicleSpec>>) {
+  if (!spec) return null;
+  return {
+    year: spec.year,
+    make: spec.make,
+    model: spec.model,
+    engine: spec.engine,
+    oilCapacityQuarts: normalizeOilCapacityQuarts(spec.oilCapacity),
+    hasOilSpecification: Boolean(spec.engineOil?.trim()),
+  };
+}
+
 vehicleRoutes.get("/years", async (c) => {
   try { return c.json({ years: await listSpecYears() }); }
   catch (error) { console.error("Vehicle year lookup failed", error); return c.json({ error: "vehicle_specs_unavailable" }, 503); }
@@ -37,7 +60,7 @@ vehicleRoutes.get("/spec", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_vehicle_lookup", issues: parsed.error.issues }, 400);
   try {
     const spec = await resolveVehicleSpec(parsed.data.year, parsed.data.make, parsed.data.model, parsed.data.engine);
-    return spec ? c.json({ spec }) : c.json({ error: "vehicle_spec_not_found" }, 404);
+    return spec ? c.json({ spec: toBookingVehicleSpec(spec) }) : c.json({ error: "vehicle_spec_not_found" }, 404);
   } catch (error) { console.error("Vehicle spec lookup failed", error); return c.json({ error: "vehicle_specs_unavailable" }, 503); }
 });
 
