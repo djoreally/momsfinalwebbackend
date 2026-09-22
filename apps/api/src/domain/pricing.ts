@@ -1,5 +1,5 @@
-import { getService } from "../repositories/services";
-import { findVehicleForCustomer } from "../repositories/customer-vehicle";
+import { getService } from "../repositories/services.js";
+import { findVehicleForCustomer } from "../repositories/customer-vehicle.js";
 
 export type PriceQuote = {
   serviceId: string;
