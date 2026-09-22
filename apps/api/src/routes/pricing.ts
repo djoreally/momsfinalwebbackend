@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { previewServicePrice, quoteService } from "../domain/pricing";
+import { previewServicePrice, quoteService } from "../domain/pricing.js";
 
 const quoteInput = z.object({
   customerId: z.string().uuid(),
