@@ -34,14 +34,10 @@ export async function createBooking(input: CreateBookingInput) {
       INSERT INTO moms_ops.booking_jobs (
         booking_id,vehicle_id,service_id,quoted_price_cents,duration_minutes,position,status
       )
-      SELECT b.id,j.vehicle_id::uuid,j.service_id::uuid,j.quoted_price_cents,j.duration_minutes,j.position,'pending'
+      SELECT b.id,j."vehicleId"::uuid,j."serviceId"::uuid,j."quotedPriceCents",j."durationMinutes",j."position",'pending'
       FROM new_booking b
       CROSS JOIN LATERAL jsonb_to_recordset(${jobsJson}::jsonb)
         AS j("vehicleId" text,"serviceId" text,"quotedPriceCents" integer,"durationMinutes" integer,"position" integer)
-      CROSS JOIN LATERAL (
-        SELECT j."vehicleId" AS vehicle_id,j."serviceId" AS service_id,
-               j."quotedPriceCents" AS quoted_price_cents,j."durationMinutes" AS duration_minutes,j."position" AS position
-      ) j2
       RETURNING *
     )
     SELECT row_to_json(b) AS booking,
