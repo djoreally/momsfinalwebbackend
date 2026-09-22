@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { databaseHealth } from "../../../packages/db/src/index.js";
-import { appointmentRoutes } from "./routes/appointments";
-import { availabilityRoutes } from "./routes/availability";
-import { customerRoutes } from "./routes/customers";
-import { pricingRoutes } from "./routes/pricing";
-import { paymentRoutes } from "./routes/payments";
-import { stripeWebhookRoutes } from "./routes/stripe-webhooks";
-import { serviceRoutes } from "./routes/services";
-import { vehicleRoutes } from "./routes/vehicles";
+import { appointmentRoutes } from "./routes/appointments.js";
+import { availabilityRoutes } from "./routes/availability.js";
+import { customerRoutes } from "./routes/customers.js";
+import { pricingRoutes } from "./routes/pricing.js";
+import { paymentRoutes } from "./routes/payments.js";
+import { stripeWebhookRoutes } from "./routes/stripe-webhooks.js";
+import { serviceRoutes } from "./routes/services.js";
+import { vehicleRoutes } from "./routes/vehicles.js";
 
 export const app = new Hono();
 
