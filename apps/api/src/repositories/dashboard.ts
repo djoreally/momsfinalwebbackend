@@ -22,7 +22,7 @@ export async function getDashboardToday(date: string) {
         'email', c.email
       ) AS customer,
       COALESCE(
-        json_agg(
+        (SELECT json_agg(
           json_build_object(
             'id', bj.id,
             'status', bj.status,
@@ -33,21 +33,24 @@ export async function getDashboardToday(date: string) {
             ),
             'service', json_build_object('id', s.id, 'name', s.name, 'slug', s.slug)
           ) ORDER BY bj.position
-        ) FILTER (WHERE bj.id IS NOT NULL),
+        )
+        FROM moms_ops.booking_jobs bj
+        LEFT JOIN moms_ops.vehicles v ON v.id = bj.vehicle_id
+        LEFT JOIN moms_ops.services s ON s.id = bj.service_id
+        WHERE bj.booking_id = b.id),
         '[]'::json
       ) AS jobs,
-      CASE WHEN p.id IS NULL THEN NULL ELSE json_build_object(
+      (SELECT json_build_object(
         'id', p.id, 'status', p.status, 'amountCents', p.amount_cents, 'currency', p.currency
-      ) END AS payment
+      )
+      FROM moms_ops.payments p
+      WHERE p.booking_id = b.id
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT 1) AS payment
     FROM moms_ops.bookings b
     JOIN moms_ops.customers c ON c.id = b.customer_id
-    LEFT JOIN moms_ops.booking_jobs bj ON bj.booking_id = b.id
-    LEFT JOIN moms_ops.vehicles v ON v.id = bj.vehicle_id
-    LEFT JOIN moms_ops.services s ON s.id = bj.service_id
-    LEFT JOIN moms_ops.payments p ON p.booking_id = b.id
     WHERE (b.scheduled_start AT TIME ZONE 'America/New_York')::date = ${date}::date
-    GROUP BY b.id,c.id,p.id
-    ORDER BY b.scheduled_start ASC
+    ORDER BY b.scheduled_start ASC, b.id ASC
   `;
   const visits = rows as Array<Record<string, any>>;
   return {
@@ -57,14 +60,13 @@ export async function getDashboardToday(date: string) {
       appointments: visits.length,
       vehicles: visits.reduce((n,v)=>n+(Array.isArray(v.jobs)?v.jobs.length:0),0),
       revenueScheduledCents: visits.reduce((n,v)=>n+Number(v.quotedTotalCents??0),0),
-      paidCents: visits.reduce((n,v)=>n+(v.payment?.status==="succeeded"?Number(v.payment.amountCents??0):0),0),
-      dueCents: visits.reduce((n,v)=>n+(v.payment?.status==="due_at_appointment"?Number(v.payment.amountCents??0):0),0),
+      paidCents: visits.reduce((n,v)=>n+(["paid","succeeded"].includes(v.payment?.status)?Number(v.payment.amountCents??0):0),0),
+      dueCents: visits.reduce((n,v)=>n+(["pending","due_at_appointment"].includes(v.payment?.status)?Number(v.payment.amountCents??0):0),0),
       needsAttention: visits.filter(v=>["failed","requires_payment_method"].includes(v.payment?.status)).length,
     },
     visits,
   };
 }
-
 
 export async function listDashboardBookings(input: { status?: string; limit: number; offset?: number }) {
   const sql = getSql();
