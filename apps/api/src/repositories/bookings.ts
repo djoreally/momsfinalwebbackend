@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { bookingJobs, bookings, getDb, getSql } from "../../../../packages/db/src/index.js";
+import { bookingJobs, bookings, customers, getDb, getSql, services, vehicles } from "../../../../packages/db/src/index.js";
 
 export type CreateBookingInput = {
   customerId: string;
@@ -52,6 +52,19 @@ export async function createBooking(input: CreateBookingInput) {
 export async function getBooking(bookingId: string) {
   const [booking] = await getDb().select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
   if (!booking) return null;
-  const jobs = await getDb().select().from(bookingJobs).where(eq(bookingJobs.bookingId, bookingId)).orderBy(asc(bookingJobs.position));
-  return { ...booking, jobs };
+  const db=getDb();
+  const [customer]=await db.select({
+    id:customers.id,firstName:customers.firstName,lastName:customers.lastName,
+    email:customers.email,phone:customers.phone,
+  }).from(customers).where(eq(customers.id,booking.customerId)).limit(1);
+  const jobs=await db.select({
+    id:bookingJobs.id,status:bookingJobs.status,quotedPriceCents:bookingJobs.quotedPriceCents,
+    durationMinutes:bookingJobs.durationMinutes,position:bookingJobs.position,
+    vehicle:{id:vehicles.id,year:vehicles.year,make:vehicles.make,model:vehicles.model,engine:vehicles.engine},
+    service:{id:services.id,name:services.name,slug:services.slug},
+  }).from(bookingJobs)
+    .innerJoin(vehicles,eq(vehicles.id,bookingJobs.vehicleId))
+    .innerJoin(services,eq(services.id,bookingJobs.serviceId))
+    .where(eq(bookingJobs.bookingId,bookingId)).orderBy(asc(bookingJobs.position));
+  return { ...booking, customer: customer??null, jobs };
 }
