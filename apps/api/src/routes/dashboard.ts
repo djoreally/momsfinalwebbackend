@@ -14,6 +14,13 @@ dashboardRoutes.get("/today", async (c) => {
 
 
 dashboardRoutes.get("/bookings", async (c) => {
-  const status = c.req.query("status")?.trim() || undefined;
-  const limitRaw = Number(c.req.query("limit") ?? 100);\n  const offsetRaw = Number(c.req.query("offset") ?? 0);\n  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw),1),200) : 100;\n  const offset = Number.isFinite(offsetRaw) ? Math.max(Math.trunc(offsetRaw),0) : 0;\n  return c.json(await listDashboardBookings({ status, limit, offset }));
+  const statusRaw = c.req.query("status")?.trim() || undefined;
+  const statusParsed = z.enum(["pending","confirmed","en_route","arrived","in_progress","completed","cancelled"]).optional().safeParse(statusRaw);
+  if (!statusParsed.success) return c.json({ error: "invalid_status" }, 400);
+  const status = statusParsed.data;
+  const limitRaw = Number(c.req.query("limit") ?? 100);
+  const offsetRaw = Number(c.req.query("offset") ?? 0);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw),1),200) : 100;
+  const offset = Number.isFinite(offsetRaw) ? Math.max(Math.trunc(offsetRaw),0) : 0;
+  return c.json(await listDashboardBookings({ status, limit, offset }));
 });
