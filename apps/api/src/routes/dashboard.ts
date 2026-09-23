@@ -15,7 +15,5 @@ dashboardRoutes.get("/today", async (c) => {
 
 dashboardRoutes.get("/bookings", async (c) => {
   const status = c.req.query("status")?.trim() || undefined;
-  const limitRaw = Number(c.req.query("limit") ?? 100);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw),1),200) : 100;
-  return c.json(await listDashboardBookings({ status, limit }));
+  const limitRaw = Number(c.req.query("limit") ?? 100);\n  const offsetRaw = Number(c.req.query("offset") ?? 0);\n  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw),1),200) : 100;\n  const offset = Number.isFinite(offsetRaw) ? Math.max(Math.trunc(offsetRaw),0) : 0;\n  return c.json(await listDashboardBookings({ status, limit, offset }));
 });
