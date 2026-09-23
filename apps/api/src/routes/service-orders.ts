@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { requireAdminSession } from "../middleware/admin-session.js";
 import { z } from "zod";
 import { ensureServiceOrdersForBooking } from "../repositories/service-orders.js";
 
 export const serviceOrderRoutes = new Hono();
+serviceOrderRoutes.use("*", requireAdminSession);
 
 serviceOrderRoutes.get("/by-booking/:bookingId", async (c) => {
   const parsed = z.string().uuid().safeParse(c.req.param("bookingId"));
