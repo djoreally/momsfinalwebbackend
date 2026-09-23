@@ -33,9 +33,10 @@ if (verifyOnly) {
 } else {
   for (const file of pending) {
     const migration = await readFile(resolve(sqlDir, file), "utf8");
-    console.log(`Applying ${file}...`);
+    const statements = migration.split(/;\\s*(?:\\n|$)/).map((statement) => statement.trim()).filter(Boolean);
+    console.log(`Applying ${file} (${statements.length} statements)...`);
     await sql.transaction([
-      sql.query(migration),
+      ...statements.map((statement) => sql.query(statement)),
       sql.query("INSERT INTO moms_ops.schema_migrations (filename) VALUES ($1)", [file]),
     ]);
     console.log(`Applied ${file}.`);
