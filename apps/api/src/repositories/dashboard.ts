@@ -80,7 +80,7 @@ export async function listDashboardBookings(input: { status?: string; limit: num
   const rows = await sql`
     SELECT b.id,b.status,b.scheduled_start AS "scheduledStart",b.scheduled_end AS "scheduledEnd",
       b.service_address_line_1 AS "serviceAddressLine1",b.service_city AS "serviceCity",b.service_state AS "serviceState",
-      b.quoted_total_cents AS "quotedTotalCents",
+      b.service_postal_code AS "servicePostalCode", b.quoted_total_cents AS "quotedTotalCents",
       json_build_object('id',c.id,'firstName',c.first_name,'lastName',c.last_name,'phone',c.phone,'email',c.email) AS customer,
       COALESCE((SELECT json_agg(json_build_object('id',bj.id,'status',bj.status,'quotedPriceCents',bj.quoted_price_cents,
         'vehicle',json_build_object('id',v.id,'year',v.year,'make',v.make,'model',v.model,'engine',v.engine),
@@ -89,7 +89,8 @@ export async function listDashboardBookings(input: { status?: string; limit: num
         LEFT JOIN moms_ops.vehicles v ON v.id=bj.vehicle_id
         LEFT JOIN moms_ops.services s ON s.id=bj.service_id
         WHERE bj.booking_id=b.id),'[]'::json) AS jobs,
-      (SELECT json_build_object('id',p.id,'status',p.status,'amountCents',p.amount_cents,'currency',p.currency)
+      (SELECT json_build_object('id',p.id,'status',p.status,'amountCents',p.amount_cents,'currency',p.currency,
+        'stripePaymentIntentId',p.stripe_payment_intent_id,'paidAt',p.paid_at)
        FROM moms_ops.payments p WHERE p.booking_id=b.id ORDER BY p.created_at DESC LIMIT 1) AS payment
     FROM moms_ops.bookings b
     JOIN moms_ops.customers c ON c.id=b.customer_id
