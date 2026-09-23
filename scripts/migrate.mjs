@@ -1,13 +1,15 @@
 import { neon } from "@neondatabase/serverless";
 import { readFile, readdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
 const sql = neon(databaseUrl);
 const verifyOnly = process.argv.includes("--verify");
-const sqlDir = resolve("packages/db/sql");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const sqlDir = resolve(repoRoot, "packages/db/sql");
 const files = (await readdir(sqlDir)).filter((name) => /^\d+.*\.sql$/.test(name)).sort();
 
 await sql.query(`
