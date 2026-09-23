@@ -19,7 +19,7 @@ stripeWebhookRoutes.post("/", async (c) => {
 
   if (event.type === "payment_intent.succeeded") {
     const intent = event.data.object;
-    await updatePaymentStatusByIntent(intent.id, "succeeded", new Date());
+    await updatePaymentStatusByIntent(intent.id, "paid", new Date());
   } else if (event.type === "payment_intent.payment_failed") {
     const intent = event.data.object;
     await updatePaymentStatusByIntent(intent.id, "failed");
