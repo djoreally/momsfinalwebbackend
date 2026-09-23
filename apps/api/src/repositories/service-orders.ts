@@ -12,7 +12,7 @@ export async function ensureServiceOrdersForBooking(bookingId:string){
       WHERE b.id=${bookingId}::uuid
     ), new_orders AS (
       INSERT INTO moms_ops.service_orders (appointment_id,customer_id,vehicle_id,status,notes)
-      SELECT DISTINCT ON (src.vehicle_id) src.appointment_id,src.customer_id,src.vehicle_id,'confirmed',src.notes
+      SELECT DISTINCT ON (src.vehicle_id) src.appointment_id,src.customer_id,src.vehicle_id,'authorized',src.notes
       FROM source src
       WHERE NOT EXISTS (
         SELECT 1 FROM moms_ops.service_orders so
