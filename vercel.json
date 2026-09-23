@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "node -e \"if(!process.env.DATABASE_URL) process.exit(42)\"",
   "rewrites": [
     {
       "source": "/(.*)",
