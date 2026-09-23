@@ -25,7 +25,7 @@ export async function createBooking(input: CreateBookingInput) {
         service_address_line_2,service_city,service_state,service_postal_code,
         quoted_total_cents,notes
       ) VALUES (
-        ${input.customerId}::uuid,'pending',${input.scheduledStart.toISOString()}::timestamptz,
+        ${input.customerId}::uuid,'confirmed',${input.scheduledStart.toISOString()}::timestamptz,
         ${input.scheduledEnd.toISOString()}::timestamptz,${input.serviceAddressLine1},
         ${input.serviceAddressLine2 ?? null},${input.serviceCity},${input.serviceState},
         ${input.servicePostalCode},${input.quotedTotalCents},${input.notes ?? null}
@@ -34,7 +34,7 @@ export async function createBooking(input: CreateBookingInput) {
       INSERT INTO moms_ops.booking_jobs (
         booking_id,vehicle_id,service_id,quoted_price_cents,duration_minutes,position,status
       )
-      SELECT b.id,j."vehicleId"::uuid,j."serviceId"::uuid,j."quotedPriceCents",j."durationMinutes",j."position",'pending'
+      SELECT b.id,j."vehicleId"::uuid,j."serviceId"::uuid,j."quotedPriceCents",j."durationMinutes",j."position",'confirmed'
       FROM new_booking b
       CROSS JOIN LATERAL jsonb_to_recordset(${jobsJson}::jsonb)
         AS j("vehicleId" text,"serviceId" text,"quotedPriceCents" integer,"durationMinutes" integer,"position" integer)
