@@ -1,1 +1,2 @@
-import { Hono } from "hono";import { listPayments } from "../repositories/operations-payments.js";export const operationsPaymentRoutes=new Hono();operationsPaymentRoutes.get("/",async c=>c.json({payments:await listPayments()}));
+import { requireAdminSession } from "../middleware/admin-session.js";
+import { Hono } from "hono";import { listPayments } from "../repositories/operations-payments.js";export const operationsPaymentRoutes=new Hono();operationsPaymentRoutes.use("*",requireAdminSession);operationsPaymentRoutes.get("/",async c=>c.json({payments:await listPayments()}));
