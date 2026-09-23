@@ -18,6 +18,11 @@ paymentRoutes.post("/booking", async (c) => {
     method: z.enum(["pay_now", "pay_at_appointment"]),
   }).safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "invalid_booking_payment_request" }, 400);
-  const result = await chooseBookingPayment(parsed.data.bookingId, parsed.data.method);
-  return result ? c.json(result, 201) : c.json({ error: "booking_not_found" }, 404);
+  try {
+    const result = await chooseBookingPayment(parsed.data.bookingId, parsed.data.method);
+    return result ? c.json(result, 201) : c.json({ error: "booking_not_found" }, 404);
+  } catch (error) {
+    if (error instanceof Error && error.message === "booking_already_paid") return c.json({ error: "booking_already_paid" }, 409);
+    throw error;
+  }
 });
