@@ -26,6 +26,13 @@ export type StripeMonetaryEvidenceInput = {
   failureMessage?:string|null;
   cancellationReason?:string|null;
   radarRiskLevel?:string|null;
+  billingName?:string|null;
+  billingEmail?:string|null;
+  billingPhone?:string|null;
+  billingCity?:string|null;
+  billingState?:string|null;
+  billingPostalCode?:string|null;
+  billingCountry?:string|null;
   payload:Record<string,unknown>;
   occurredAt:Date;
 };
@@ -58,6 +65,13 @@ export async function recordStripeMonetaryEvidence(input:StripeMonetaryEvidenceI
     failureMessage:input.failureMessage??null,
     cancellationReason:input.cancellationReason??null,
     radarRiskLevel:input.radarRiskLevel??null,
+    billingName:input.billingName??null,
+    billingEmail:input.billingEmail??null,
+    billingPhone:input.billingPhone??null,
+    billingCity:input.billingCity??null,
+    billingState:input.billingState??null,
+    billingPostalCode:input.billingPostalCode??null,
+    billingCountry:input.billingCountry??null,
     payload:input.payload,
     occurredAt:input.occurredAt,
   }).onConflictDoNothing({target:stripeMonetaryEvents.evidenceKey});
