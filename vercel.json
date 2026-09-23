@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "pnpm db:migrate && pnpm typecheck",
+  "buildCommand": "pnpm db:migrate",
   "rewrites": [
     {
       "source": "/(.*)",
