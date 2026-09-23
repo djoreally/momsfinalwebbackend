@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { databaseHealth } from "../../../packages/db/src/index.js";
+import { applyStripeMonetaryEventsMigration, databaseHealth } from "../../../packages/db/src/index.js";
 import { appointmentRoutes } from "./routes/appointments.js";
 import { bookingRoutes } from "./routes/bookings.js";
 import { availabilityRoutes } from "./routes/availability.js";
@@ -15,6 +15,8 @@ import { stripeWebhookRoutes } from "./routes/stripe-webhooks.js";
 import { serviceRoutes } from "./routes/services.js";
 import { serviceOrderRoutes } from "./routes/service-orders.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
+
+await applyStripeMonetaryEventsMigration();
 
 export const app = new Hono();
 
