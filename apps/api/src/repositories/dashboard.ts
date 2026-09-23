@@ -90,7 +90,26 @@ export async function listDashboardBookings(input: { status?: string; limit: num
         LEFT JOIN moms_ops.services s ON s.id=bj.service_id
         WHERE bj.booking_id=b.id),'[]'::json) AS jobs,
       (SELECT json_build_object('id',p.id,'status',p.status,'amountCents',p.amount_cents,'currency',p.currency,
-        'stripePaymentIntentId',p.stripe_payment_intent_id,'paidAt',p.paid_at)
+        'stripePaymentIntentId',p.stripe_payment_intent_id,'paidAt',p.paid_at,
+        'stripeEvidence',(
+          SELECT json_build_object(
+            'eventType', sme.stripe_event_type,
+            'intentStatus', sme.intent_status,
+            'grossCents', sme.gross_cents,
+            'feeCents', sme.fee_cents,
+            'netCents', sme.net_cents,
+            'refundedCents', sme.refunded_cents,
+            'paymentMethodType', sme.payment_method_type,
+            'walletType', sme.wallet_type,
+            'correlationConfidence', sme.correlation_confidence,
+            'occurredAt', sme.occurred_at
+          )
+          FROM moms_ops.stripe_monetary_events sme
+          WHERE sme.stripe_payment_intent_id=p.stripe_payment_intent_id
+             OR sme.moms_payment_id=p.id
+          ORDER BY sme.occurred_at DESC, sme.created_at DESC
+          LIMIT 1
+        ))
        FROM moms_ops.payments p WHERE p.booking_id=b.id ORDER BY p.created_at DESC LIMIT 1) AS payment
     FROM moms_ops.bookings b
     JOIN moms_ops.customers c ON c.id=b.customer_id
