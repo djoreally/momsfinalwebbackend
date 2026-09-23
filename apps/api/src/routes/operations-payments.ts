@@ -1,0 +1,1 @@
+import { Hono } from "hono";import { listPayments } from "../repositories/operations-payments.js";export const operationsPaymentRoutes=new Hono();operationsPaymentRoutes.get("/",async c=>c.json({payments:await listPayments()}));
