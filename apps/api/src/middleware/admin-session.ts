@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { MiddlewareHandler } from "hono";
-import { getSql } from "../../../packages/db/src/index.js";
+import { getSql } from "../../../../packages/db/src/index.js";
 
 const COOKIE_NAME = "moms_admin_session";
 
