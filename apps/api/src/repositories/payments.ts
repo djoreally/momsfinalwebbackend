@@ -39,3 +39,14 @@ export async function updatePaymentStatusByIntent(stripePaymentIntentId: string,
   }).where(eq(payments.stripePaymentIntentId, stripePaymentIntentId)).returning();
   return payment ?? null;
 }
+
+export async function setPaymentMethodState(paymentId: string, status: string, stripePaymentIntentId: string | null, amountCents: number) {
+  const [payment] = await getDb().update(payments).set({
+    status,
+    stripePaymentIntentId,
+    amountCents,
+    paidAt: null,
+    updatedAt: new Date(),
+  }).where(eq(payments.id, paymentId)).returning();
+  return payment;
+}
