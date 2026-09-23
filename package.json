@@ -5,7 +5,9 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "node --test test/*.test.mjs",
-    "test:prod": "MOMS_API_SMOKE_URL=https://momsbackend.vercel.app node --test test/*.test.mjs"
+    "test:prod": "MOMS_API_SMOKE_URL=https://momsbackend.vercel.app node --test test/*.test.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:migrate:verify": "node scripts/migrate.mjs --verify"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
