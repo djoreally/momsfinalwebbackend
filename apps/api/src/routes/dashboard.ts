@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { requireAdminSession } from "../middleware/admin-session.js";
 import { z } from "zod";
 import { getDashboardToday, listDashboardBookings } from "../repositories/dashboard.js";
 
 export const dashboardRoutes = new Hono();
+dashboardRoutes.use("*", requireAdminSession);
 
 dashboardRoutes.get("/today", async (c) => {
   const parsed = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).safeParse(c.req.query("date"));
