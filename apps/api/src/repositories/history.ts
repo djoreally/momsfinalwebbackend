@@ -5,7 +5,7 @@ SELECT c.id,c.first_name AS "firstName",c.last_name AS "lastName",c.email,c.phon
  (SELECT count(*)::int FROM moms_ops.bookings b WHERE b.customer_id=c.id) AS "appointmentCount",
  (SELECT count(*)::int FROM moms_ops.service_orders so WHERE so.customer_id=c.id) AS "serviceOrderCount",
  (SELECT count(*)::int FROM moms_ops.invoices i WHERE i.customer_id=c.id) AS "invoiceCount",
- COALESCE((SELECT sum(i.total_cents) FROM moms_ops.invoices i WHERE i.customer_id=c.id),0)::int AS "invoicedCents"
+ COALESCE((SELECT sum(p.amount_cents) FROM moms_ops.payments p LEFT JOIN moms_ops.bookings b ON b.id=p.booking_id LEFT JOIN moms_ops.invoices i ON i.id=p.invoice_id WHERE p.status IN ('paid','succeeded') AND (b.customer_id=c.id OR i.customer_id=c.id)),0)::int AS "totalPaidCents"
 FROM moms_ops.customers c
 WHERE (${query}='' OR c.first_name ILIKE ${pattern} OR c.last_name ILIKE ${pattern} OR c.email ILIKE ${pattern} OR c.phone ILIKE ${pattern})
 ORDER BY c.last_name,c.first_name,c.id
