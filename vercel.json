@@ -12,5 +12,8 @@
       "path": "/health/database",
       "schedule": "* * * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": true
+  }
 }
