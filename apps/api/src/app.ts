@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { applyStripeMonetaryEventsMigration, databaseHealth } from "../../../packages/db/src/index.js";
+import { applyCampaignSettingsMigration, applyStripeMonetaryEventsMigration, databaseHealth } from "../../../packages/db/src/index.js";
 import { appointmentRoutes } from "./routes/appointments.js";
 import { bookingRoutes } from "./routes/bookings.js";
 import { availabilityRoutes } from "./routes/availability.js";
+import { campaignSettingsRoutes } from "./routes/campaign-settings.js";
 import { customerRoutes } from "./routes/customers.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { historyRoutes } from "./routes/history.js";
@@ -19,6 +20,7 @@ import { serviceOrderRoutes } from "./routes/service-orders.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
 
 await applyStripeMonetaryEventsMigration();
+await applyCampaignSettingsMigration();
 
 export const app = new Hono();
 
@@ -61,6 +63,7 @@ app.get("/health/database", async (c) => {
 });
 
 app.route("/v1/appointments", appointmentRoutes);
+app.route("/v1/campaigns", campaignSettingsRoutes);
 app.route("/v1/bookings", bookingRoutes);
 app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
