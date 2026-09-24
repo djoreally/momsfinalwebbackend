@@ -60,7 +60,7 @@ export async function quoteService(input: {
   const discountCents = service.basePriceCents - effectiveBasePriceCents;
   const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeWaived = Boolean(
+  const processingFeeWaived = social99Eligible || Boolean(
     input.waiveProcessingFee && service.processingFeeWaivable,
   );
   const processingFeeCents = processingFeeWaived
@@ -111,7 +111,7 @@ export async function previewServicePrice(input: {
   const discountCents = service.basePriceCents - effectiveBasePriceCents;
   const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeCents = centsForPercent(serviceSubtotalCents, processingFeePercent);
+  const processingFeeCents = social99Eligible ? 0 : centsForPercent(serviceSubtotalCents, processingFeePercent);
   const totalCents = serviceSubtotalCents + processingFeeCents;
 
   return {
