@@ -26,6 +26,7 @@ pricingRoutes.post("/quote", async (c) => {
 const previewInput = z.object({
   serviceId: z.string().uuid(),
   oilCapacityQuarts: z.number().positive().max(30).optional().nullable(),
+  offerCode: z.literal("SOCIAL99").optional().nullable(),
 });
 
 pricingRoutes.post("/preview", async (c) => {
