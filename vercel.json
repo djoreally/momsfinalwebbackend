@@ -10,7 +10,7 @@
   "crons": [
     {
       "path": "/health/database",
-      "schedule": "* * * * *"
+      "schedule": "0 12 * * *"
     }
   ],
   "git": {
