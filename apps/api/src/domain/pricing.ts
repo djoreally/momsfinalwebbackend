@@ -1,6 +1,8 @@
 import { getService } from "../repositories/services.js";
 import { findVehicleForCustomer } from "../repositories/customer-vehicle.js";
 
+export const SOCIAL99_OFFER_CODE = "SOCIAL99" as const;
+
 export type PriceQuote = {
   serviceId: string;
   vehicleId: string;
@@ -19,6 +21,8 @@ export type PriceQuote = {
   totalCents: number;
   durationMinutes: number;
   pricingVersion: "moms-v2";
+  offerCodeApplied: string | null;
+  discountCents: number;
 };
 
 function centsForPercent(amountCents: number, percent: number) {
@@ -31,6 +35,7 @@ export async function quoteService(input: {
   serviceId: string;
   waiveExtraQuarts?: boolean;
   waiveProcessingFee?: boolean;
+  offerCode?: string | null;
 }): Promise<PriceQuote | null> {
   const [vehicle, service] = await Promise.all([
     findVehicleForCustomer(input.customerId, input.vehicleId),
@@ -50,9 +55,12 @@ export async function quoteService(input: {
       ? 0
       : Math.round(extraQuarts * service.extraQuartPriceCents);
 
-  const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
+  const social99Eligible = input.offerCode === SOCIAL99_OFFER_CODE && service.basePriceCents === 11900;
+  const effectiveBasePriceCents = social99Eligible ? 9900 : service.basePriceCents;
+  const discountCents = service.basePriceCents - effectiveBasePriceCents;
+  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeWaived = Boolean(
+  const processingFeeWaived = social99Eligible || Boolean(
     input.waiveProcessingFee && service.processingFeeWaivable,
   );
   const processingFeeCents = processingFeeWaived
@@ -64,7 +72,7 @@ export async function quoteService(input: {
     serviceId: service.id,
     vehicleId: vehicle.id,
     currency: "usd",
-    basePriceCents: service.basePriceCents,
+    basePriceCents: effectiveBasePriceCents,
     oilCapacityQuarts: capacity,
     includedQuarts: included,
     extraQuarts,
@@ -78,6 +86,8 @@ export async function quoteService(input: {
     totalCents: preTaxTotalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2",
+    offerCodeApplied: social99Eligible ? SOCIAL99_OFFER_CODE : null,
+    discountCents,
   };
 }
 
@@ -85,6 +95,7 @@ export async function quoteService(input: {
 export async function previewServicePrice(input: {
   serviceId: string;
   oilCapacityQuarts?: number | null;
+  offerCode?: string | null;
 }) {
   const service = await getService(input.serviceId);
   if (!service || !service.active) return null;
@@ -95,15 +106,18 @@ export async function previewServicePrice(input: {
     capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
   const extraQuartChargeCents =
     service.extraQuartPriceCents === null ? 0 : Math.round(extraQuarts * service.extraQuartPriceCents);
-  const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
+  const social99Eligible = input.offerCode === SOCIAL99_OFFER_CODE && service.basePriceCents === 11900;
+  const effectiveBasePriceCents = social99Eligible ? 9900 : service.basePriceCents;
+  const discountCents = service.basePriceCents - effectiveBasePriceCents;
+  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeCents = centsForPercent(serviceSubtotalCents, processingFeePercent);
+  const processingFeeCents = social99Eligible ? 0 : centsForPercent(serviceSubtotalCents, processingFeePercent);
   const totalCents = serviceSubtotalCents + processingFeeCents;
 
   return {
     serviceId: service.id,
     currency: "usd" as const,
-    basePriceCents: service.basePriceCents,
+    basePriceCents: effectiveBasePriceCents,
     oilCapacityQuarts: capacity,
     includedQuarts: included,
     extraQuarts,
@@ -115,6 +129,8 @@ export async function previewServicePrice(input: {
     totalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2" as const,
+    offerCodeApplied: social99Eligible ? SOCIAL99_OFFER_CODE : null,
+    discountCents,
     isExact: capacity !== null || service.includedQuarts === null,
   };
 }

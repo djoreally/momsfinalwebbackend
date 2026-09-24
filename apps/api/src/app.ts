@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { databaseHealth } from "../../../packages/db/src/index.js";
+import { applyStripeMonetaryEventsMigration, databaseHealth } from "../../../packages/db/src/index.js";
 import { appointmentRoutes } from "./routes/appointments.js";
 import { bookingRoutes } from "./routes/bookings.js";
 import { availabilityRoutes } from "./routes/availability.js";
 import { customerRoutes } from "./routes/customers.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { historyRoutes } from "./routes/history.js";
+import { mediaRoutes } from "./routes/media.js";
 import { operationsPaymentRoutes } from "./routes/operations-payments.js";
 import { operationsRoutes } from "./routes/operations.js";
 import { pricingRoutes } from "./routes/pricing.js";
@@ -15,6 +16,8 @@ import { stripeWebhookRoutes } from "./routes/stripe-webhooks.js";
 import { serviceRoutes } from "./routes/services.js";
 import { serviceOrderRoutes } from "./routes/service-orders.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
+
+await applyStripeMonetaryEventsMigration();
 
 export const app = new Hono();
 
@@ -62,6 +65,7 @@ app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
 app.route("/v1/dashboard", dashboardRoutes);
 app.route("/v1/history", historyRoutes);
+app.route("/v1/media", mediaRoutes);
 app.route("/v1/operations/payments", operationsPaymentRoutes);
 app.route("/v1/operations", operationsRoutes);
 app.route("/v1/services", serviceRoutes);
