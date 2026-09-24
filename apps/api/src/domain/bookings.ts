@@ -1,4 +1,4 @@
-import { quoteService } from "./pricing.js";
+import { quoteService, SOCIAL99_OFFER_CODE } from "./pricing.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
 
@@ -15,8 +15,10 @@ export async function reserveBooking(input: {
   serviceState: string;
   servicePostalCode: string;
   notes?: string | null;
+  offerCode?: string | null;
 }) {
   if (!input.jobs.length) throw new BookingValidationError("booking_requires_job");
+  if (input.offerCode === SOCIAL99_OFFER_CODE && input.jobs.length !== 1) throw new BookingValidationError("social99_single_vehicle_only");
 
   const unique = new Set(input.jobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
   if (unique.size !== input.jobs.length) throw new BookingValidationError("duplicate_booking_job");
@@ -25,10 +27,14 @@ export async function reserveBooking(input: {
     customerId: input.customerId,
     vehicleId: job.vehicleId,
     serviceId: job.serviceId,
+    offerCode: input.offerCode,
   })));
   if (quotes.some((quote) => !quote)) throw new BookingValidationError("quote_not_available");
 
   const resolved = quotes.filter((quote): quote is NonNullable<typeof quote> => Boolean(quote));
+  if (input.offerCode === SOCIAL99_OFFER_CODE && resolved.some((quote) => quote.offerCodeApplied !== SOCIAL99_OFFER_CODE)) {
+    throw new BookingValidationError("social99_not_applicable");
+  }
   const durationMinutes = resolved.reduce((sum, quote) => sum + quote.durationMinutes, 0);
   const quotedTotalCents = resolved.reduce((sum, quote) => sum + quote.totalCents, 0);
   const scheduledEnd = new Date(input.scheduledStart.getTime() + durationMinutes * 60_000);
