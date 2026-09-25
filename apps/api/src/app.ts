@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { applyStripeMonetaryEventsMigration, databaseHealth } from "../../../packages/db/src/index.js";
+import { applyOperationalSettingsMigration, applyStripeMonetaryEventsMigration, databaseHealth } from "../../../packages/db/src/index.js";
 import { appointmentRoutes } from "./routes/appointments.js";
 import { bookingRoutes } from "./routes/bookings.js";
 import { availabilityRoutes } from "./routes/availability.js";
@@ -16,9 +16,11 @@ import { paymentRoutes } from "./routes/payments.js";
 import { stripeWebhookRoutes } from "./routes/stripe-webhooks.js";
 import { serviceRoutes } from "./routes/services.js";
 import { serviceOrderRoutes } from "./routes/service-orders.js";
+import { settingsRoutes } from "./routes/settings.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
 
 await applyStripeMonetaryEventsMigration();
+await applyOperationalSettingsMigration();
 
 export const app = new Hono();
 
@@ -71,6 +73,7 @@ app.route("/v1/newsletter", newsletterRoutes);
 app.route("/v1/operations/payments", operationsPaymentRoutes);
 app.route("/v1/operations", operationsRoutes);
 app.route("/v1/services", serviceRoutes);
+app.route("/v1/settings", settingsRoutes);
 app.route("/v1/service-orders", serviceOrderRoutes);
 app.route("/v1/vehicles", vehicleRoutes);
 app.route("/v1/pricing", pricingRoutes);
