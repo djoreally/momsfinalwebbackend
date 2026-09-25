@@ -8,7 +8,7 @@ type AvailabilitySettings={timezone:string;slotIntervalMinutes:number;weeklyHour
 const defaults:AvailabilitySettings={timezone:"America/New_York",slotIntervalMinutes:30,weeklyHours:[
  {day:0,enabled:false,open:"08:00",close:"17:00"},{day:1,enabled:true,open:"08:00",close:"17:00"},{day:2,enabled:true,open:"08:00",close:"17:00"},{day:3,enabled:true,open:"08:00",close:"17:00"},{day:4,enabled:true,open:"08:00",close:"17:00"},{day:5,enabled:true,open:"08:00",close:"17:00"},{day:6,enabled:true,open:"08:00",close:"17:00"}],blackoutDates:[]};
 
-async function settings():Promise<AvailabilitySettings>{const rows=await getSql()("SELECT value FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1");return {...defaults,...(rows[0]?.value as Partial<AvailabilitySettings>|undefined)}}
+async function settings():Promise<AvailabilitySettings>{const sql=getSql();const rows=await sql`SELECT value FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1`;return {...defaults,...(rows[0]?.value as Partial<AvailabilitySettings>|undefined)}}
 function atLocalTime(date:string,time:string,zone:string){return Temporal.ZonedDateTime.from(`${date}T${time}:00[${zone}]`)}
 
 export async function getAvailability(input:{serviceId:string;date:string}){
