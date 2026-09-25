@@ -1,4 +1,5 @@
 import { getBooking } from "../repositories/bookings.js";
+import { getSql } from "../../../../packages/db/src/index.js";
 
 const RESEND_API = "https://api.resend.com/emails";
 
@@ -6,6 +7,9 @@ function money(cents: number) { return new Intl.NumberFormat("en-US",{style:"cur
 function esc(value: unknown) { return String(value ?? "").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c] || c)); }
 
 export async function sendBookingConfirmation(bookingId: string) {
+  const rows=await getSql()`SELECT value FROM moms_ops.operational_settings WHERE key='notifications' LIMIT 1`;
+  const notifications=(rows[0]?.value as {bookingConfirmationEmail?:boolean;ownerBccEmail?:string}|undefined)??{bookingConfirmationEmail:true,ownerBccEmail:"support@momsoilchange.com"};
+  if(notifications.bookingConfirmationEmail===false)return {sent:false,reason:"disabled"} as const;
   const apiKey=process.env.RESEND_API_KEY;
   if(!apiKey){ console.warn("RESEND_API_KEY is not configured; booking confirmation skipped"); return {sent:false,reason:"not_configured"} as const; }
   const booking=await getBooking(bookingId);
@@ -14,7 +18,7 @@ export async function sendBookingConfirmation(bookingId: string) {
   if(!customer?.email) return {sent:false,reason:"customer_email_missing"} as const;
 
   const from=process.env.BOOKING_EMAIL_FROM || "MOMS Mobile Oil Change <bookings@momsoilchange.com>";
-  const owner="support@momsoilchange.com";
+  const owner=notifications.ownerBccEmail??"support@momsoilchange.com";
   const when=new Intl.DateTimeFormat("en-US",{dateStyle:"full",timeStyle:"short",timeZone:"America/New_York"}).format(new Date(booking.scheduledStart));
   const jobs=booking.jobs.map((j)=>`<li><strong>${esc(j.service.name)}</strong> — ${esc(j.vehicle.year)} ${esc(j.vehicle.make)} ${esc(j.vehicle.model)} (${money(j.quotedPriceCents)})</li>`).join("");
   const address=[booking.serviceAddressLine1,booking.serviceAddressLine2,booking.serviceCity,booking.serviceState,booking.servicePostalCode].filter(Boolean).map(esc).join(", ");
