@@ -32,6 +32,8 @@ export async function listSpecMakes(year: number): Promise<string[]> {
   const rows = await getVehicleSpecsSql()`
     SELECT DISTINCT trim(make) AS make FROM public.motor_oil_specs
     WHERE year = ${year} AND nullif(trim(make), '') IS NOT NULL
+      AND nullif(trim(engine_oil), '') IS NOT NULL AND lower(trim(engine_oil)) NOT IN ('unverified','n/a')
+      AND nullif(trim(oil_capacity), '') IS NOT NULL AND lower(trim(oil_capacity)) NOT LIKE 'unverified%' AND lower(trim(oil_capacity)) NOT LIKE 'n/a%'
     ORDER BY make`;
   return rows.map((row) => clean(row.make));
 }
@@ -40,6 +42,8 @@ export async function listSpecModels(year: number, make: string): Promise<string
   const rows = await getVehicleSpecsSql()`
     SELECT DISTINCT trim(model) AS model FROM public.motor_oil_specs
     WHERE year = ${year} AND lower(trim(make)) = lower(trim(${make})) AND nullif(trim(model), '') IS NOT NULL
+      AND nullif(trim(engine_oil), '') IS NOT NULL AND lower(trim(engine_oil)) NOT IN ('unverified','n/a')
+      AND nullif(trim(oil_capacity), '') IS NOT NULL AND lower(trim(oil_capacity)) NOT LIKE 'unverified%' AND lower(trim(oil_capacity)) NOT LIKE 'n/a%'
     ORDER BY model`;
   return rows.map((row) => clean(row.model));
 }
@@ -51,6 +55,8 @@ export async function listSpecEngines(year: number, make: string, model: string)
       AND lower(trim(make)) = lower(trim(${make}))
       AND lower(trim(model)) = lower(trim(${model}))
       AND nullif(trim(engine), '') IS NOT NULL
+      AND nullif(trim(engine_oil), '') IS NOT NULL AND lower(trim(engine_oil)) NOT IN ('unverified','n/a')
+      AND nullif(trim(oil_capacity), '') IS NOT NULL AND lower(trim(oil_capacity)) NOT LIKE 'unverified%' AND lower(trim(oil_capacity)) NOT LIKE 'n/a%'
     ORDER BY engine`;
   return rows.map((row) => clean(row.engine));
 }
