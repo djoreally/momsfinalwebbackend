@@ -21,6 +21,8 @@ const createInput = z.object({
   consent:z.object({
     termsAccepted:z.boolean(),
     privacyAccepted:z.boolean(),
+    emailMarketingAccepted:z.boolean(),
+    smsMarketingAccepted:z.boolean(),
     termsVersion:z.string().trim().min(1).max(80),
   }).strict(),
 });
@@ -52,8 +54,8 @@ bookingRoutes.post("/", async (c) => {
     const booking = await reserveBooking({ ...bookingInput, scheduledStart: new Date(bookingInput.scheduledStart) });
     const bookingId = String((booking as { id?: unknown }).id ?? "");
     if (bookingId) {
-      await sql`INSERT INTO moms_ops.booking_consents(booking_id,terms_version,terms_accepted_at,privacy_accepted_at)
-        VALUES(${bookingId}::uuid,${consent.termsVersion},now(),now())
+      await sql`INSERT INTO moms_ops.booking_consents(booking_id,terms_version,terms_accepted_at,privacy_accepted_at,email_marketing_accepted,sms_marketing_accepted)
+        VALUES(${bookingId}::uuid,${consent.termsVersion},now(),now(),${consent.emailMarketingAccepted},${consent.smsMarketingAccepted})
         ON CONFLICT(booking_id) DO NOTHING`;
       try { await sendBookingConfirmation(bookingId); }
       catch (emailError) { console.error("Booking saved but confirmation email failed", { bookingId, emailError }); }
