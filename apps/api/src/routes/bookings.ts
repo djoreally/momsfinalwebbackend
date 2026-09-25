@@ -57,6 +57,21 @@ bookingRoutes.post("/", async (c) => {
       await sql`INSERT INTO moms_ops.booking_consents(booking_id,terms_version,terms_accepted_at,privacy_accepted_at,email_marketing_accepted,sms_marketing_accepted)
         VALUES(${bookingId}::uuid,${consent.termsVersion},now(),now(),${consent.emailMarketingAccepted},${consent.smsMarketingAccepted})
         ON CONFLICT(booking_id) DO NOTHING`;
+
+      const savedBooking=await getBooking(bookingId);
+      const customer=savedBooking?.customer;
+      if(!consent.emailMarketingAccepted&&customer?.email){
+        const destination=customer.email.trim().toLowerCase();
+        await sql`INSERT INTO moms_ops.marketing_suppressions(channel,destination,reason,source)
+          VALUES('email',${destination},'customer_opt_out','booking_consent')
+          ON CONFLICT(channel,destination) DO UPDATE SET reason='customer_opt_out',source='booking_consent',created_at=now()`;
+      }
+      if(!consent.smsMarketingAccepted&&customer?.phone){
+        const destination=customer.phone.trim();
+        await sql`INSERT INTO moms_ops.marketing_suppressions(channel,destination,reason,source)
+          VALUES('sms',${destination},'customer_opt_out','booking_consent')
+          ON CONFLICT(channel,destination) DO UPDATE SET reason='customer_opt_out',source='booking_consent',created_at=now()`;
+      }
       try { await sendBookingConfirmation(bookingId); }
       catch (emailError) { console.error("Booking saved but confirmation email failed", { bookingId, emailError }); }
     }
