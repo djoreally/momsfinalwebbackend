@@ -158,3 +158,25 @@ settingsRoutes.put("/notifications",async(c)=>{
   const rows=await sql`SELECT value,updated_at FROM moms_ops.operational_settings WHERE key='notifications' LIMIT 1`;
   return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null});
 });
+
+
+const consentSettings=z.object({
+  termsVersion:z.string().trim().min(1).max(80),
+  termsUrl:z.string().trim().startsWith("/").max(300),
+  privacyUrl:z.string().trim().startsWith("/").max(300),
+  requireTerms:z.boolean(),
+  requirePrivacy:z.boolean(),
+}).strict();
+const consentDefaults={termsVersion:"2026-09-25",termsUrl:"/terms",privacyUrl:"/privacy-policy",requireTerms:true,requirePrivacy:true};
+
+settingsRoutes.get("/consent",async(c)=>{
+ const rows=await getSql()`SELECT value,updated_at FROM moms_ops.operational_settings WHERE key='consent' LIMIT 1`;const row=rows[0];
+ return c.json({settings:row?.value??consentDefaults,updatedAt:row?.updated_at??null});
+});
+settingsRoutes.put("/consent",async(c)=>{
+ const parsed=consentSettings.safeParse(await c.req.json().catch(()=>null));if(!parsed.success)return c.json({error:"invalid_consent_settings"},400);
+ const payload=JSON.stringify(parsed.data),sql=getSql();
+ await sql`INSERT INTO moms_ops.operational_settings(key,value,updated_at) VALUES('consent',${payload}::jsonb,now()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`;
+ const rows=await sql`SELECT value,updated_at FROM moms_ops.operational_settings WHERE key='consent' LIMIT 1`;
+ return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null});
+});
