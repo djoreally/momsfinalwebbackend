@@ -133,3 +133,26 @@ const paymentSettings=z.object({
 const paymentDefaults={allowPayNow:true,allowPayAtAppointment:true,defaultMethod:"pay_at_appointment" as const};
 settingsRoutes.get("/payments",async(c)=>{const sql=getSql();const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1");const row=rows[0];return c.json({settings:row?.value??paymentDefaults,updatedAt:row?.updated_at??null})});
 settingsRoutes.put("/payments",async(c)=>{const parsed=paymentSettings.safeParse(await c.req.json().catch(()=>null));if(!parsed.success)return c.json({error:"invalid_payment_settings"},400);if(!parsed.data.allowPayNow&&!parsed.data.allowPayAtAppointment)return c.json({error:"payment_method_required"},400);if(parsed.data.defaultMethod==="pay_now"&&!parsed.data.allowPayNow)return c.json({error:"invalid_default_payment_method"},400);if(parsed.data.defaultMethod==="pay_at_appointment"&&!parsed.data.allowPayAtAppointment)return c.json({error:"invalid_default_payment_method"},400);const sql=getSql(),payload=JSON.stringify(parsed.data);await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('payments',$1::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",[payload]);const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1");return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null})});
+
+
+const notificationSettings=z.object({
+  bookingConfirmationEmail:z.boolean(),
+  invoiceEmail:z.boolean(),
+  ownerBccEmail:z.string().trim().email().or(z.literal("")),
+}).strict();
+const notificationDefaults={bookingConfirmationEmail:true,invoiceEmail:true,ownerBccEmail:"support@momsoilchange.com"};
+
+settingsRoutes.get("/notifications",async(c)=>{
+  const sql=getSql();
+  const rows=await sql`SELECT value,updated_at FROM moms_ops.operational_settings WHERE key='notifications' LIMIT 1`;
+  const row=rows[0];
+  return c.json({settings:row?.value??notificationDefaults,updatedAt:row?.updated_at??null});
+});
+settingsRoutes.put("/notifications",async(c)=>{
+  const parsed=notificationSettings.safeParse(await c.req.json().catch(()=>null));
+  if(!parsed.success)return c.json({error:"invalid_notification_settings"},400);
+  const sql=getSql(),payload=JSON.stringify(parsed.data);
+  await sql`INSERT INTO moms_ops.operational_settings(key,value,updated_at) VALUES('notifications',${payload}::jsonb,now()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`;
+  const rows=await sql`SELECT value,updated_at FROM moms_ops.operational_settings WHERE key='notifications' LIMIT 1`;
+  return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null});
+});
