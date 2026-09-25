@@ -60,3 +60,45 @@ settingsRoutes.put("/booking", async (c) => {
   const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1");
   return c.json({ settings: rows[0]?.value ?? parsed.data, updatedAt: rows[0]?.updated_at ?? null });
 });
+
+
+const availabilitySettings = z.object({
+  timezone: z.string().trim().min(1).max(80),
+  slotIntervalMinutes: z.number().int().min(15).max(240),
+  weeklyHours: z.array(z.object({
+    day: z.number().int().min(0).max(6),
+    enabled: z.boolean(),
+    open: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    close: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  })).length(7),
+  blackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(366),
+}).strict();
+
+const availabilityDefaults = {
+  timezone:"America/New_York",
+  slotIntervalMinutes:30,
+  weeklyHours:[
+    {day:0,enabled:false,open:"08:00",close:"17:00"},
+    {day:1,enabled:true,open:"08:00",close:"17:00"},
+    {day:2,enabled:true,open:"08:00",close:"17:00"},
+    {day:3,enabled:true,open:"08:00",close:"17:00"},
+    {day:4,enabled:true,open:"08:00",close:"17:00"},
+    {day:5,enabled:true,open:"08:00",close:"17:00"},
+    {day:6,enabled:true,open:"08:00",close:"17:00"},
+  ],
+  blackoutDates:[],
+};
+
+settingsRoutes.get("/availability", async (c) => {
+  const sql=getSql(); const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1"); const row=rows[0];
+  return c.json({settings:row?.value ?? availabilityDefaults,updatedAt:row?.updated_at ?? null});
+});
+settingsRoutes.put("/availability", async (c) => {
+  const parsed=availabilitySettings.safeParse(await c.req.json().catch(()=>null));
+  if(!parsed.success)return c.json({error:"invalid_availability_settings"},400);
+  if(parsed.data.weeklyHours.some(x=>x.enabled && x.close<=x.open))return c.json({error:"availability_close_must_follow_open"},400);
+  const sql=getSql(),payload=JSON.stringify(parsed.data);
+  await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('availability',$1::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",[payload]);
+  const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1");
+  return c.json({settings:rows[0]?.value ?? parsed.data,updatedAt:rows[0]?.updated_at ?? null});
+});
