@@ -9,7 +9,7 @@ export const operationsPaymentRoutes=new Hono();
 operationsPaymentRoutes.use("*",requireAdminSession);
 
 operationsPaymentRoutes.get("/",async c=>{
-  const q=z.object({limit:z.coerce.number().int().min(1).max(200).default(100),offset:z.coerce.number().int().min(0).default(0),status:z.enum(["pending","processing","paid","failed","refunded","cancelled"]).optional()}).safeParse(c.req.query());
+  const q=z.object({limit:z.coerce.number().int().min(1).max(200).default(100),offset:z.coerce.number().int().min(0).default(0),status:z.enum(["pending","processing","due_at_appointment","paid","failed","refunded","cancelled"]).optional()}).safeParse(c.req.query());
   if(!q.success)return c.json({error:"invalid_query"},400);
   return c.json(await listPayments(q.data));
 });
