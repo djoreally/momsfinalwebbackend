@@ -19,7 +19,7 @@ export async function sendBookingConfirmation(bookingId: string) {
 
   const from=process.env.BOOKING_EMAIL_FROM || "MOMS Mobile Oil Change <bookings@momsoilchange.com>";
   const owner=notifications.ownerBccEmail??"support@momsoilchange.com";
-  const when=new Intl.DateTimeFormat("en-US",{dateStyle:"full",timeStyle:"short",timeZone:"America/New_York"}).format(new Date(booking.scheduledStart));
+  const when=new Intl.DateTimeFormat("en-US",{month:"2-digit",day:"2-digit",year:"numeric",hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}).format(new Date(booking.scheduledStart));
   const jobs=booking.jobs.map((j)=>`<li><strong>${esc(j.service.name)}</strong> — ${esc(j.vehicle.year)} ${esc(j.vehicle.make)} ${esc(j.vehicle.model)} (${money(j.quotedPriceCents)})</li>`).join("");
   const address=[booking.serviceAddressLine1,booking.serviceAddressLine2,booking.serviceCity,booking.serviceState,booking.servicePostalCode].filter(Boolean).map(esc).join(", ");
   const total=money(booking.quotedTotalCents);
