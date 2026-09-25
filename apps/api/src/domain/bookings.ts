@@ -31,6 +31,13 @@ export async function reserveBooking(input: {
     const localDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
     if (localDay(input.scheduledStart) === localDay(new Date())) throw new BookingValidationError("same_day_booking_disabled");
   }
+  const areaRows = await sql("SELECT value FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1");
+  const area = (areaRows[0]?.value as {enabled?:boolean;allowedStates?:string[];allowedPostalCodes?:string[];enforcementMode?:"postal_codes"|"state_only"}|undefined) ?? {enabled:true,allowedStates:["PA"],allowedPostalCodes:[],enforcementMode:"state_only"};
+  if (area.enabled !== false) {
+    const state=input.serviceState.trim().toUpperCase(), postal=input.servicePostalCode.trim().slice(0,5);
+    if (!(area.allowedStates ?? ["PA"]).map(x=>x.toUpperCase()).includes(state)) throw new BookingValidationError("outside_service_area");
+    if (area.enforcementMode==="postal_codes" && !(area.allowedPostalCodes ?? []).includes(postal)) throw new BookingValidationError("outside_service_area");
+  }
   if (input.offerCode === SOCIAL99_OFFER_CODE && input.jobs.length !== 1) throw new BookingValidationError("social99_single_vehicle_only");
 
   const unique = new Set(input.jobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
