@@ -20,7 +20,7 @@ const businessSettings = z.object({
 
 settingsRoutes.get("/business", async (c) => {
   const sql = getSql();
-  const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='business' LIMIT 1");
+  const rows = await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='business' LIMIT 1`;
   const row = rows[0];
   return c.json({ settings: row?.value ?? null, updatedAt: row?.updated_at ?? null });
 });
@@ -30,8 +30,8 @@ settingsRoutes.put("/business", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_business_settings" }, 400);
   const sql = getSql();
   const payload = JSON.stringify(parsed.data);
-  await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('business', $1::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()", [payload]);
-  const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='business' LIMIT 1");
+  await sql`INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('business', ${payload}::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`;
+  const rows = await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='business' LIMIT 1`;
   return c.json({ settings: rows[0]?.value ?? parsed.data, updatedAt: rows[0]?.updated_at ?? null });
 });
 
@@ -46,9 +46,9 @@ const bookingSettings = z.object({
 
 settingsRoutes.get("/booking", async (c) => {
   const sql = getSql();
-  const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1");
+  const rows = await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1`;
   const row = rows[0];
-  return c.json({ settings: row?.value ?? { bookingEnabled:true, allowSameDay:false, minimumLeadMinutes:1440, maximumAdvanceDays:90, maxVehiclesPerBooking:10 }, updatedAt: row?.updated_at ?? null });
+  return c.json({ settings: row?.value ?? { bookingEnabled:true, allowSameDay:false, minimumLeadMinutes:0, maximumAdvanceDays:90, maxVehiclesPerBooking:10 }, updatedAt: row?.updated_at ?? null });
 });
 
 settingsRoutes.put("/booking", async (c) => {
@@ -56,8 +56,8 @@ settingsRoutes.put("/booking", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_booking_settings" }, 400);
   const sql = getSql();
   const payload = JSON.stringify(parsed.data);
-  await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('booking', $1::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()", [payload]);
-  const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1");
+  await sql`INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('booking', ${payload}::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`;
+  const rows = await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1`;
   return c.json({ settings: rows[0]?.value ?? parsed.data, updatedAt: rows[0]?.updated_at ?? null });
 });
 
@@ -90,7 +90,7 @@ const availabilityDefaults = {
 };
 
 settingsRoutes.get("/availability", async (c) => {
-  const sql=getSql(); const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1"); const row=rows[0];
+  const sql=getSql(); const rows=await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1`; const row=rows[0];
   return c.json({settings:row?.value ?? availabilityDefaults,updatedAt:row?.updated_at ?? null});
 });
 settingsRoutes.put("/availability", async (c) => {
@@ -98,8 +98,8 @@ settingsRoutes.put("/availability", async (c) => {
   if(!parsed.success)return c.json({error:"invalid_availability_settings"},400);
   if(parsed.data.weeklyHours.some(x=>x.enabled && x.close<=x.open))return c.json({error:"availability_close_must_follow_open"},400);
   const sql=getSql(),payload=JSON.stringify(parsed.data);
-  await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('availability',$1::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",[payload]);
-  const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1");
+  await sql`INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('availability',${payload}::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`;
+  const rows=await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1`;
   return c.json({settings:rows[0]?.value ?? parsed.data,updatedAt:rows[0]?.updated_at ?? null});
 });
 
@@ -113,15 +113,15 @@ const serviceAreaSettings=z.object({
 const serviceAreaDefaults={enabled:true,allowedStates:["PA"],allowedPostalCodes:[],enforcementMode:"state_only" as const};
 
 settingsRoutes.get("/service-area",async(c)=>{
- const sql=getSql();const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1");const row=rows[0];
+ const sql=getSql();const rows=await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1`;const row=rows[0];
  return c.json({settings:row?.value??serviceAreaDefaults,updatedAt:row?.updated_at??null});
 });
 settingsRoutes.put("/service-area",async(c)=>{
  const parsed=serviceAreaSettings.safeParse(await c.req.json().catch(()=>null));if(!parsed.success)return c.json({error:"invalid_service_area_settings"},400);
  if(parsed.data.enforcementMode==="postal_codes"&&!parsed.data.allowedPostalCodes.length)return c.json({error:"service_area_requires_postal_codes"},400);
  const sql=getSql(),payload=JSON.stringify({...parsed.data,allowedStates:parsed.data.allowedStates.map(x=>x.toUpperCase())});
- await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('service_area',$1::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",[payload]);
- const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1");return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null});
+ await sql`INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('service_area',${payload}::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`;
+ const rows=await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1`;return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null});
 });
 
 
@@ -131,8 +131,8 @@ const paymentSettings=z.object({
   defaultMethod:z.enum(["pay_now","pay_at_appointment"]),
 }).strict();
 const paymentDefaults={allowPayNow:true,allowPayAtAppointment:true,defaultMethod:"pay_at_appointment" as const};
-settingsRoutes.get("/payments",async(c)=>{const sql=getSql();const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1");const row=rows[0];return c.json({settings:row?.value??paymentDefaults,updatedAt:row?.updated_at??null})});
-settingsRoutes.put("/payments",async(c)=>{const parsed=paymentSettings.safeParse(await c.req.json().catch(()=>null));if(!parsed.success)return c.json({error:"invalid_payment_settings"},400);if(!parsed.data.allowPayNow&&!parsed.data.allowPayAtAppointment)return c.json({error:"payment_method_required"},400);if(parsed.data.defaultMethod==="pay_now"&&!parsed.data.allowPayNow)return c.json({error:"invalid_default_payment_method"},400);if(parsed.data.defaultMethod==="pay_at_appointment"&&!parsed.data.allowPayAtAppointment)return c.json({error:"invalid_default_payment_method"},400);const sql=getSql(),payload=JSON.stringify(parsed.data);await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('payments',$1::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",[payload]);const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1");return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null})});
+settingsRoutes.get("/payments",async(c)=>{const sql=getSql();const rows=await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1`;const row=rows[0];return c.json({settings:row?.value??paymentDefaults,updatedAt:row?.updated_at??null})});
+settingsRoutes.put("/payments",async(c)=>{const parsed=paymentSettings.safeParse(await c.req.json().catch(()=>null));if(!parsed.success)return c.json({error:"invalid_payment_settings"},400);if(!parsed.data.allowPayNow&&!parsed.data.allowPayAtAppointment)return c.json({error:"payment_method_required"},400);if(parsed.data.defaultMethod==="pay_now"&&!parsed.data.allowPayNow)return c.json({error:"invalid_default_payment_method"},400);if(parsed.data.defaultMethod==="pay_at_appointment"&&!parsed.data.allowPayAtAppointment)return c.json({error:"invalid_default_payment_method"},400);const sql=getSql(),payload=JSON.stringify(parsed.data);await sql`INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('payments',${payload}::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`;const rows=await sql`SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1`;return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null})});
 
 
 const notificationSettings=z.object({
