@@ -15,6 +15,9 @@ export async function sendInvoiceEmail(invoiceId:string){
  if(!invoice.email)throw new Error("customer_email_missing");
  const apiKey=process.env.RESEND_API_KEY;if(!apiKey)throw new Error("invoice_email_not_configured");
  const sql=getSql();
+ const notificationRows=await sql`SELECT value FROM moms_ops.operational_settings WHERE key='notifications' LIMIT 1`;
+ const notifications=(notificationRows[0]?.value as {invoiceEmail?:boolean;ownerBccEmail?:string}|undefined)??{invoiceEmail:true,ownerBccEmail:"support@momsoilchange.com"};
+ if(notifications.invoiceEmail===false)return {sent:false,reason:"disabled"} as const;
  const paymentRows=await sql`SELECT p.id,p.stripe_payment_intent_id FROM moms_ops.payments p WHERE p.invoice_id=${invoiceId}::uuid OR p.booking_id=(SELECT appointment_id FROM moms_ops.invoices WHERE id=${invoiceId}::uuid) ORDER BY p.created_at DESC LIMIT 1`;
  let payment=paymentRows[0] as any;
  if(!payment){const created=await sql`INSERT INTO moms_ops.payments(booking_id,invoice_id,amount_cents,currency,status) SELECT appointment_id,id,amount_due_cents,currency,'pending' FROM moms_ops.invoices WHERE id=${invoiceId}::uuid RETURNING id`;payment=created[0];}
