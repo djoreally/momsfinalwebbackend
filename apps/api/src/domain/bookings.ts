@@ -2,6 +2,7 @@ import { quoteService, SOCIAL99_OFFER_CODE } from "./pricing.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
 import { getSql } from "../../../../packages/db/src/index.js";
+import { bookingTimingError, getBookingPolicy } from "./booking-policy.js";
 
 export class BookingConflictError extends Error {}
 export class BookingValidationError extends Error {}
@@ -20,17 +21,10 @@ export async function reserveBooking(input: {
 }) {
   if (!input.jobs.length) throw new BookingValidationError("booking_requires_job");
   const sql = getSql();
-  const rows = await sql`SELECT value FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1`;
-  const settings = (rows[0]?.value as { bookingEnabled?: boolean; allowSameDay?: boolean; minimumLeadMinutes?: number; maximumAdvanceDays?: number; maxVehiclesPerBooking?: number } | undefined) ?? {};
-  if (settings.bookingEnabled === false) throw new BookingValidationError("booking_disabled");
-  if (input.jobs.length > (settings.maxVehiclesPerBooking ?? 10)) throw new BookingValidationError("too_many_vehicles");
-  const now = Date.now();
-  if (input.scheduledStart.getTime() < now + (settings.minimumLeadMinutes ?? 1440) * 60_000) throw new BookingValidationError("booking_lead_time");
-  if (input.scheduledStart.getTime() > now + (settings.maximumAdvanceDays ?? 90) * 86_400_000) throw new BookingValidationError("booking_too_far_ahead");
-  if (settings.allowSameDay === false) {
-    const localDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
-    if (localDay(input.scheduledStart) === localDay(new Date())) throw new BookingValidationError("same_day_booking_disabled");
-  }
+  const policy=await getBookingPolicy();
+  if(input.jobs.length>policy.maxVehiclesPerBooking)throw new BookingValidationError("too_many_vehicles");
+  const timingError=bookingTimingError(input.scheduledStart,policy);
+  if(timingError)throw new BookingValidationError(timingError);
   const areaRows = await sql`SELECT value FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1`;
   const area = (areaRows[0]?.value as {enabled?:boolean;allowedStates?:string[];allowedPostalCodes?:string[];enforcementMode?:"postal_codes"|"state_only"}|undefined) ?? {enabled:true,allowedStates:["PA"],allowedPostalCodes:[],enforcementMode:"state_only"};
   if (area.enabled !== false) {
