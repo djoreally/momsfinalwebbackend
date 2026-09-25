@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { bookingJobs, bookings, customers, getDb, getSql, services, vehicles } from "../../../../packages/db/src/index.js";
+import { bookingJobs, bookings, customers, getDb, getSql, payments, services, vehicles } from "../../../../packages/db/src/index.js";
 
 export type CreateBookingInput = {
   customerId: string;
@@ -57,6 +57,7 @@ export async function getBooking(bookingId: string) {
     id:customers.id,firstName:customers.firstName,lastName:customers.lastName,
     email:customers.email,phone:customers.phone,
   }).from(customers).where(eq(customers.id,booking.customerId)).limit(1);
+  const [payment]=await db.select({status:payments.status,amountCents:payments.amountCents,paidAt:payments.paidAt}).from(payments).where(eq(payments.bookingId,bookingId)).limit(1);
   const jobs=await db.select({
     id:bookingJobs.id,status:bookingJobs.status,quotedPriceCents:bookingJobs.quotedPriceCents,
     durationMinutes:bookingJobs.durationMinutes,position:bookingJobs.position,
@@ -66,5 +67,5 @@ export async function getBooking(bookingId: string) {
     .innerJoin(vehicles,eq(vehicles.id,bookingJobs.vehicleId))
     .innerJoin(services,eq(services.id,bookingJobs.serviceId))
     .where(eq(bookingJobs.bookingId,bookingId)).orderBy(asc(bookingJobs.position));
-  return { ...booking, customer: customer??null, jobs };
+  return { ...booking, customer: customer??null, payment: payment??null, jobs };
 }
