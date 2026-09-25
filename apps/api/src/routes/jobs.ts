@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getSql } from "../../../../packages/db/src/index.js";
 import { send24HourReminder } from "../services/reminder-email.js";
+import { sendPostServiceReviewRequest } from "../services/review-email.js";
 
 export const jobRoutes=new Hono();
 
@@ -47,5 +48,33 @@ jobRoutes.get("/appointment-reminders",async c=>{
    await sql`UPDATE moms_ops.operational_notification_log SET status='failed',detail=${error instanceof Error?error.message.slice(0,500):"unknown_error"},updated_at=now() WHERE booking_id=${bookingId}::uuid AND notification_type='appointment_24h_reminder'`;
   }
  }
- return c.json({ok:true,candidates:due.length,sent,skipped,failed});
+ const reviewDue=await sql`SELECT l.booking_id AS id
+ FROM moms_ops.operational_notification_log l
+ JOIN moms_ops.bookings b ON b.id=l.booking_id
+ WHERE l.notification_type='post_service_review'
+   AND b.status='completed'
+   AND (l.status IN ('pending','failed') OR (l.status='claimed' AND l.updated_at<now()-interval '30 minutes'))
+ ORDER BY l.created_at
+ LIMIT 100`;
+ let reviewSent=0,reviewSkipped=0,reviewFailed=0;
+ for(const row of reviewDue){
+  const bookingId=String(row.id);
+  try{
+   const claim=await sql`UPDATE moms_ops.operational_notification_log
+     SET status='claimed',detail=NULL,updated_at=now()
+     WHERE booking_id=${bookingId}::uuid AND notification_type='post_service_review'
+       AND (status IN ('pending','failed') OR (status='claimed' AND updated_at<now()-interval '30 minutes'))
+     RETURNING booking_id`;
+   if(!claim.length){reviewSkipped++;continue;}
+   const result=await sendPostServiceReviewRequest(bookingId);
+   await sql`UPDATE moms_ops.operational_notification_log
+     SET status=${result.sent?"sent":"skipped"},detail=${result.sent?null:result.reason},sent_at=${result.sent?new Date().toISOString():null}::timestamptz,updated_at=now()
+     WHERE booking_id=${bookingId}::uuid AND notification_type='post_service_review'`;
+   result.sent?reviewSent++:reviewSkipped++;
+  }catch(error){
+   reviewFailed++;
+   await sql`UPDATE moms_ops.operational_notification_log SET status='failed',detail=${error instanceof Error?error.message.slice(0,500):"unknown_error"},updated_at=now() WHERE booking_id=${bookingId}::uuid AND notification_type='post_service_review'`;
+  }
+ }
+ return c.json({ok:true,reminders:{candidates:due.length,sent,skipped,failed},reviews:{candidates:reviewDue.length,sent:reviewSent,skipped:reviewSkipped,failed:reviewFailed}});
 });
