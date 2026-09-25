@@ -3,6 +3,7 @@ import { z } from "zod";
 import { BookingConflictError, BookingValidationError, reserveBooking } from "../domain/bookings.js";
 import { getBooking } from "../repositories/bookings.js";
 import { sendBookingConfirmation } from "../services/booking-email.js";
+import { getSql } from "../../../../packages/db/src/index.js";
 
 const createInput = z.object({
   customerId: z.string().uuid(),
@@ -18,6 +19,12 @@ const createInput = z.object({
 });
 
 export const bookingRoutes = new Hono();
+
+bookingRoutes.get("/config", async (c) => {
+  const rows=await getSql()`SELECT value FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1`;
+  const p=(rows[0]?.value as {allowPayNow?:boolean;allowPayAtAppointment?:boolean;defaultMethod?:"pay_now"|"pay_at_appointment"}|undefined)??{allowPayNow:true,allowPayAtAppointment:true,defaultMethod:"pay_at_appointment"};
+  return c.json({payments:{allowPayNow:p.allowPayNow!==false,allowPayAtAppointment:p.allowPayAtAppointment!==false,defaultMethod:p.defaultMethod??"pay_at_appointment"}});
+});
 
 bookingRoutes.post("/", async (c) => {
   const parsed = createInput.safeParse(await c.req.json().catch(() => null));
