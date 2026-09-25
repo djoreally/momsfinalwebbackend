@@ -22,6 +22,7 @@ jobRoutes.get("/appointment-reminders",async c=>{
    AND NOT EXISTS(
      SELECT 1 FROM moms_ops.operational_notification_log l
      WHERE l.booking_id=b.id AND l.notification_type='appointment_24h_reminder'
+       AND (l.status IN ('sent','skipped') OR (l.status='claimed' AND l.updated_at>=now()-interval '30 minutes'))
    )
  ORDER BY b.scheduled_start
  LIMIT 100`;
@@ -32,7 +33,11 @@ jobRoutes.get("/appointment-reminders",async c=>{
    // Claim first. The unique key makes concurrent/retried cron invocations idempotent.
    const claim=await sql`INSERT INTO moms_ops.operational_notification_log(booking_id,notification_type,status,created_at,updated_at)
      VALUES(${bookingId}::uuid,'appointment_24h_reminder','claimed',now(),now())
-     ON CONFLICT(booking_id,notification_type) DO NOTHING RETURNING booking_id`;
+     ON CONFLICT(booking_id,notification_type) DO UPDATE
+       SET status='claimed',detail=NULL,updated_at=now()
+       WHERE moms_ops.operational_notification_log.status='failed'
+          OR (moms_ops.operational_notification_log.status='claimed' AND moms_ops.operational_notification_log.updated_at<now()-interval '30 minutes')
+     RETURNING booking_id`;
    if(!claim.length){skipped++;continue;}
    const result=await send24HourReminder(bookingId);
    await sql`UPDATE moms_ops.operational_notification_log SET status=${result.sent?"sent":"skipped"},detail=${result.sent?null:result.reason},sent_at=${result.sent?new Date().toISOString():null}::timestamptz,updated_at=now() WHERE booking_id=${bookingId}::uuid AND notification_type='appointment_24h_reminder'`;
