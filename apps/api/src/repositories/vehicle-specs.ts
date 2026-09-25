@@ -24,7 +24,7 @@ const nullableClean = (value: unknown): string | null => {
 };
 
 export async function listSpecYears(): Promise<number[]> {
-  const rows = await getVehicleSpecsSql()`SELECT DISTINCT year FROM public.motor_oil_specs WHERE year BETWEEN 1999 AND 2027 ORDER BY year DESC`;
+  const rows = await getVehicleSpecsSql()`SELECT DISTINCT year FROM public.motor_oil_specs WHERE year BETWEEN 1999 AND 2027 AND nullif(trim(engine_oil), '') IS NOT NULL AND lower(trim(engine_oil)) NOT IN ('unverified','n/a') AND nullif(trim(oil_capacity), '') IS NOT NULL AND lower(trim(oil_capacity)) NOT LIKE 'unverified%' AND lower(trim(oil_capacity)) NOT LIKE 'n/a%' ORDER BY year DESC`;
   return rows.map((row) => Number(row.year));
 }
 
