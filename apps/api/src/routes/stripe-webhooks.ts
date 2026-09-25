@@ -37,7 +37,7 @@ stripeWebhookRoutes.post("/", async (c) => {
           }
           if (paid) {
             const { getSql } = await import("../../../../packages/db/src/index.js");
-            await getSql()`UPDATE moms_ops.invoices i SET status='paid',amount_paid_cents=i.total_cents,amount_due_cents=0,paid_at=COALESCE(i.paid_at,now()),updated_at=now() FROM moms_ops.payments p WHERE p.id=${paid.id}::uuid AND p.invoice_id=i.id`;
+            await getSql()`UPDATE moms_ops.invoices i SET status=CASE WHEN i.amount_paid_cents+p.amount_cents>=i.total_cents THEN 'paid' ELSE i.status END,amount_paid_cents=LEAST(i.total_cents,i.amount_paid_cents+p.amount_cents),amount_due_cents=GREATEST(0,i.total_cents-(i.amount_paid_cents+p.amount_cents)),paid_at=CASE WHEN i.amount_paid_cents+p.amount_cents>=i.total_cents THEN COALESCE(i.paid_at,now()) ELSE i.paid_at END,updated_at=now() FROM moms_ops.payments p WHERE p.id=${paid.id}::uuid AND p.invoice_id=i.id`;
           }
         } else if (event.type === "payment_intent.payment_failed") {
           await updatePaymentStatusByIntent(intent.id, "failed");
