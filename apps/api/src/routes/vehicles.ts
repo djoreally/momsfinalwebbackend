@@ -24,8 +24,15 @@ function toBookingVehicleSpec(spec: Awaited<ReturnType<typeof resolveVehicleSpec
     make: spec.make,
     model: spec.model,
     engine: spec.engine,
+    engineOil: spec.engineOil,
+    oilCapacity: spec.oilCapacity,
     oilCapacityQuarts: normalizeOilCapacityQuarts(spec.oilCapacity),
-    hasOilSpecification: Boolean(spec.engineOil?.trim()),
+    oilPlugTorque: spec.oilPlugTorque,
+    wixOilFilter: spec.wixOilFilter,
+    napaGoldOilFilter: spec.napaGoldOilFilter,
+    stpOilFilter: spec.stpOilFilter,
+    sourceDataset: spec.sourceDataset,
+    hasOilSpecification: Boolean(spec.engineOil),
   };
 }
 
