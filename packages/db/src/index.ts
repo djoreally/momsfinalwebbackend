@@ -45,7 +45,18 @@ export * from "./schema.js";
 
 export async function applyOperationalSettingsMigration(): Promise<void> {
   const sql = getSql();
-  await sql("CREATE TABLE IF NOT EXISTS moms_ops.operational_settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+  await sql`CREATE TABLE IF NOT EXISTS moms_ops.operational_settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`CREATE TABLE IF NOT EXISTS moms_ops.operational_notification_log (
+    booking_id uuid NOT NULL REFERENCES moms_ops.bookings(id) ON DELETE CASCADE,
+    notification_type text NOT NULL,
+    status text NOT NULL,
+    detail text,
+    sent_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (booking_id, notification_type)
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS operational_notification_log_status_idx ON moms_ops.operational_notification_log(status,notification_type)`;
 }
 
 
