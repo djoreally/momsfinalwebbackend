@@ -102,3 +102,24 @@ settingsRoutes.put("/availability", async (c) => {
   const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='availability' LIMIT 1");
   return c.json({settings:rows[0]?.value ?? parsed.data,updatedAt:rows[0]?.updated_at ?? null});
 });
+
+
+const serviceAreaSettings=z.object({
+  enabled:z.boolean(),
+  allowedStates:z.array(z.string().trim().min(2).max(2)).min(1).max(10),
+  allowedPostalCodes:z.array(z.string().trim().regex(/^\d{5}$/)).max(500),
+  enforcementMode:z.enum(["postal_codes","state_only"]),
+}).strict();
+const serviceAreaDefaults={enabled:true,allowedStates:["PA"],allowedPostalCodes:[],enforcementMode:"state_only" as const};
+
+settingsRoutes.get("/service-area",async(c)=>{
+ const sql=getSql();const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1");const row=rows[0];
+ return c.json({settings:row?.value??serviceAreaDefaults,updatedAt:row?.updated_at??null});
+});
+settingsRoutes.put("/service-area",async(c)=>{
+ const parsed=serviceAreaSettings.safeParse(await c.req.json().catch(()=>null));if(!parsed.success)return c.json({error:"invalid_service_area_settings"},400);
+ if(parsed.data.enforcementMode==="postal_codes"&&!parsed.data.allowedPostalCodes.length)return c.json({error:"service_area_requires_postal_codes"},400);
+ const sql=getSql(),payload=JSON.stringify({...parsed.data,allowedStates:parsed.data.allowedStates.map(x=>x.toUpperCase())});
+ await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('service_area',$1::jsonb,now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",[payload]);
+ const rows=await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='service_area' LIMIT 1");return c.json({settings:rows[0]?.value??parsed.data,updatedAt:rows[0]?.updated_at??null});
+});
