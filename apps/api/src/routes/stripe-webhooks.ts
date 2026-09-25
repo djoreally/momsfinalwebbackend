@@ -29,7 +29,12 @@ stripeWebhookRoutes.post("/", async (c) => {
         const intent = event.data.object;
         await recordPaymentIntentEvent(event, intent);
         if (event.type === "payment_intent.succeeded") {
-          const paid = await updatePaymentStatusByIntent(intent.id, "paid", new Date());
+          let paid = await updatePaymentStatusByIntent(intent.id, "paid", new Date());
+          if (!paid && intent.metadata?.moms_payment_id) {
+            const { getSql } = await import("../../../../packages/db/src/index.js");
+            const linked = await getSql()`UPDATE moms_ops.payments SET stripe_payment_intent_id=${intent.id},status='paid',paid_at=now(),updated_at=now() WHERE id=${intent.metadata.moms_payment_id}::uuid RETURNING *`;
+            paid = linked[0] as any;
+          }
           if (paid) {
             const { getSql } = await import("../../../../packages/db/src/index.js");
             await getSql()`UPDATE moms_ops.invoices i SET status='paid',amount_paid_cents=i.total_cents,amount_due_cents=0,paid_at=COALESCE(i.paid_at,now()),updated_at=now() FROM moms_ops.payments p WHERE p.id=${paid.id}::uuid AND p.invoice_id=i.id`;
