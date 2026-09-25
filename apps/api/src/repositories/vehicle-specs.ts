@@ -70,6 +70,8 @@ export async function resolveVehicleSpec(year: number, make: string, model: stri
       AND lower(trim(make)) = lower(trim(${make}))
       AND lower(trim(model)) = lower(trim(${model}))
       AND lower(trim(engine)) = lower(trim(${engine}))
+      AND nullif(trim(engine_oil), '') IS NOT NULL AND lower(trim(engine_oil)) NOT IN ('unverified','n/a')
+      AND nullif(trim(oil_capacity), '') IS NOT NULL AND lower(trim(oil_capacity)) NOT LIKE 'unverified%' AND lower(trim(oil_capacity)) NOT LIKE 'n/a%'
     ORDER BY id DESC LIMIT 1
   `;
   const row = rows[0];
