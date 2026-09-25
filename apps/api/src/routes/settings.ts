@@ -138,10 +138,11 @@ settingsRoutes.put("/payments",async(c)=>{const parsed=paymentSettings.safeParse
 const notificationSettings=z.object({
   bookingConfirmationEmail:z.boolean(),
   invoiceEmail:z.boolean(),
+  appointmentReminderEmail:z.boolean(),
   postServiceReviewEmail:z.boolean(),
   ownerBccEmail:z.string().trim().email().or(z.literal("")),
 }).strict();
-const notificationDefaults={bookingConfirmationEmail:true,invoiceEmail:true,postServiceReviewEmail:true,ownerBccEmail:"support@momsoilchange.com"};
+const notificationDefaults={bookingConfirmationEmail:true,invoiceEmail:true,appointmentReminderEmail:true,postServiceReviewEmail:true,ownerBccEmail:"support@momsoilchange.com"};
 
 settingsRoutes.get("/notifications",async(c)=>{
   const sql=getSql();
