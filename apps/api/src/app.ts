@@ -32,7 +32,7 @@ app.use("/v1/*", cors({
     if (/^https:\/\/[^/]+\.vercel\.app$/.test(origin)) return origin;
     return "https://momsoilchange.com";
   },
-  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type"],
   maxAge: 86400,
 }));
