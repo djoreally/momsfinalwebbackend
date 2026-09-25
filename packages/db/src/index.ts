@@ -73,6 +73,8 @@ export async function applyOperationalSettingsMigration(): Promise<void> {
     privacy_accepted_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   )`;
+  await sql`ALTER TABLE moms_ops.booking_consents ADD COLUMN IF NOT EXISTS email_marketing_accepted boolean NOT NULL DEFAULT true`;
+  await sql`ALTER TABLE moms_ops.booking_consents ADD COLUMN IF NOT EXISTS sms_marketing_accepted boolean NOT NULL DEFAULT true`;
 }
 
 
