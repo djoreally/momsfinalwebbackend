@@ -12,6 +12,7 @@ export async function sendInvoiceEmail(invoiceId:string){
   FROM moms_ops.invoices i JOIN moms_ops.customers c ON c.id=i.customer_id WHERE i.id=${invoiceId}::uuid LIMIT 1`;
  const invoice=rows[0] as any;if(!invoice)throw new Error("invoice_not_found");
  if(invoice.status!=="issued")throw new Error("invoice_not_issued");
+ if(Number(invoice.amountDueCents)<=0)throw new Error("invoice_nothing_due");
  if(!invoice.email)throw new Error("customer_email_missing");
  const apiKey=process.env.RESEND_API_KEY;if(!apiKey)throw new Error("invoice_email_not_configured");
  const sql=getSql();
