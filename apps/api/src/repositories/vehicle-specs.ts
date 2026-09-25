@@ -16,24 +16,43 @@ export type VehicleOilSpec = {
   sourceDataset: string;
 };
 
+const clean = (value: unknown): string => String(value ?? "").trim();
+const nullableClean = (value: unknown): string | null => {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized && !/^(unverified|n\/a(?:\s+qts?\.?(?:\s+with\s+filter)?)?)$/i.test(normalized) ? normalized : null;
+};
+
 export async function listSpecYears(): Promise<number[]> {
-  const rows = await getVehicleSpecsSql()`SELECT DISTINCT year FROM public.motor_oil_specs ORDER BY year DESC`;
+  const rows = await getVehicleSpecsSql()`SELECT DISTINCT year FROM public.motor_oil_specs WHERE year BETWEEN 1999 AND 2027 ORDER BY year DESC`;
   return rows.map((row) => Number(row.year));
 }
 
 export async function listSpecMakes(year: number): Promise<string[]> {
-  const rows = await getVehicleSpecsSql()`SELECT DISTINCT make FROM public.motor_oil_specs WHERE year = ${year} ORDER BY make`;
-  return rows.map((row) => String(row.make));
+  const rows = await getVehicleSpecsSql()`
+    SELECT DISTINCT trim(make) AS make FROM public.motor_oil_specs
+    WHERE year = ${year} AND nullif(trim(make), '') IS NOT NULL
+    ORDER BY make`;
+  return rows.map((row) => clean(row.make));
 }
 
 export async function listSpecModels(year: number, make: string): Promise<string[]> {
-  const rows = await getVehicleSpecsSql()`SELECT DISTINCT model FROM public.motor_oil_specs WHERE year = ${year} AND lower(make) = lower(${make}) ORDER BY model`;
-  return rows.map((row) => String(row.model));
+  const rows = await getVehicleSpecsSql()`
+    SELECT DISTINCT trim(model) AS model FROM public.motor_oil_specs
+    WHERE year = ${year} AND lower(trim(make)) = lower(trim(${make})) AND nullif(trim(model), '') IS NOT NULL
+    ORDER BY model`;
+  return rows.map((row) => clean(row.model));
 }
 
 export async function listSpecEngines(year: number, make: string, model: string): Promise<string[]> {
-  const rows = await getVehicleSpecsSql()`SELECT DISTINCT engine FROM public.motor_oil_specs WHERE year = ${year} AND lower(make) = lower(${make}) AND lower(model) = lower(${model}) ORDER BY engine`;
-  return rows.map((row) => String(row.engine));
+  const rows = await getVehicleSpecsSql()`
+    SELECT DISTINCT trim(engine) AS engine FROM public.motor_oil_specs
+    WHERE year = ${year}
+      AND lower(trim(make)) = lower(trim(${make}))
+      AND lower(trim(model)) = lower(trim(${model}))
+      AND nullif(trim(engine), '') IS NOT NULL
+    ORDER BY engine`;
+  return rows.map((row) => clean(row.engine));
 }
 
 export async function resolveVehicleSpec(year: number, make: string, model: string, engine: string): Promise<VehicleOilSpec | null> {
@@ -41,20 +60,23 @@ export async function resolveVehicleSpec(year: number, make: string, model: stri
     SELECT id, year, make, model, engine, engine_oil, oil_capacity, oil_plug_torque,
            oil_life_reset_instructions, wix_oil_filter, napa_gold_oil_filter, stp_oil_filter, source_dataset
     FROM public.motor_oil_specs
-    WHERE year = ${year} AND lower(make) = lower(${make}) AND lower(model) = lower(${model}) AND lower(engine) = lower(${engine})
+    WHERE year = ${year}
+      AND lower(trim(make)) = lower(trim(${make}))
+      AND lower(trim(model)) = lower(trim(${model}))
+      AND lower(trim(engine)) = lower(trim(${engine}))
     ORDER BY id DESC LIMIT 1
   `;
   const row = rows[0];
   if (!row) return null;
   return {
-    id: Number(row.id), year: Number(row.year), make: String(row.make), model: String(row.model), engine: String(row.engine),
-    engineOil: row.engine_oil == null ? null : String(row.engine_oil),
-    oilCapacity: row.oil_capacity == null ? null : String(row.oil_capacity),
-    oilPlugTorque: row.oil_plug_torque == null ? null : String(row.oil_plug_torque),
-    oilLifeResetInstructions: row.oil_life_reset_instructions == null ? null : String(row.oil_life_reset_instructions),
-    wixOilFilter: row.wix_oil_filter == null ? null : String(row.wix_oil_filter),
-    napaGoldOilFilter: row.napa_gold_oil_filter == null ? null : String(row.napa_gold_oil_filter),
-    stpOilFilter: row.stp_oil_filter == null ? null : String(row.stp_oil_filter),
-    sourceDataset: String(row.source_dataset),
+    id: Number(row.id), year: Number(row.year), make: clean(row.make), model: clean(row.model), engine: clean(row.engine),
+    engineOil: nullableClean(row.engine_oil),
+    oilCapacity: nullableClean(row.oil_capacity),
+    oilPlugTorque: nullableClean(row.oil_plug_torque),
+    oilLifeResetInstructions: nullableClean(row.oil_life_reset_instructions),
+    wixOilFilter: nullableClean(row.wix_oil_filter),
+    napaGoldOilFilter: nullableClean(row.napa_gold_oil_filter),
+    stpOilFilter: nullableClean(row.stp_oil_filter),
+    sourceDataset: clean(row.source_dataset),
   };
 }
