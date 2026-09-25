@@ -2,6 +2,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { getService } from "../repositories/services.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { getSql } from "../../../../packages/db/src/index.js";
+import { bookingTimingError, getBookingPolicy } from "./booking-policy.js";
 
 type DayHours={day:number;enabled:boolean;open:string;close:string};
 type AvailabilitySettings={timezone:string;slotIntervalMinutes:number;weeklyHours:DayHours[];blackoutDates:string[]};
@@ -14,6 +15,7 @@ function atLocalTime(date:string,time:string,zone:string){return Temporal.ZonedD
 export async function getAvailability(input:{serviceId:string;date:string}){
  const service=await getService(input.serviceId); if(!service||!service.active)return null;
  const config=await settings();
+ const policy=await getBookingPolicy();
  if(config.blackoutDates.includes(input.date))return {serviceId:service.id,date:input.date,durationMinutes:service.defaultDurationMinutes,timezone:config.timezone,slots:[]};
  const midday=Temporal.ZonedDateTime.from(`${input.date}T12:00:00[${config.timezone}]`);
  const hours=config.weeklyHours.find(x=>x.day===midday.dayOfWeek%7);
@@ -21,7 +23,7 @@ export async function getAvailability(input:{serviceId:string;date:string}){
  const open=atLocalTime(input.date,hours.open,config.timezone),close=atLocalTime(input.date,hours.close,config.timezone),slots=[];
  for(let cursor=open;Temporal.ZonedDateTime.compare(cursor.add({minutes:service.defaultDurationMinutes}),close)<=0;cursor=cursor.add({minutes:config.slotIntervalMinutes})){
   const end=cursor.add({minutes:service.defaultDurationMinutes}),startDate=new Date(cursor.epochMilliseconds),endDate=new Date(end.epochMilliseconds);
-  if(!(await hasAppointmentConflict(startDate,endDate)))slots.push({start:startDate.toISOString(),end:endDate.toISOString()});
+  if(!bookingTimingError(startDate,policy)&&!(await hasAppointmentConflict(startDate,endDate)))slots.push({start:startDate.toISOString(),end:endDate.toISOString()});
  }
  return {serviceId:service.id,date:input.date,durationMinutes:service.defaultDurationMinutes,timezone:config.timezone,slots};
 }
