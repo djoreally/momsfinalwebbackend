@@ -34,3 +34,29 @@ settingsRoutes.put("/business", async (c) => {
   const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='business' LIMIT 1");
   return c.json({ settings: rows[0]?.value ?? parsed.data, updatedAt: rows[0]?.updated_at ?? null });
 });
+
+
+const bookingSettings = z.object({
+  bookingEnabled: z.boolean(),
+  allowSameDay: z.boolean(),
+  minimumLeadMinutes: z.number().int().min(0).max(10080),
+  maximumAdvanceDays: z.number().int().min(1).max(365),
+  maxVehiclesPerBooking: z.number().int().min(1).max(10),
+}).strict();
+
+settingsRoutes.get("/booking", async (c) => {
+  const sql = getSql();
+  const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1");
+  const row = rows[0];
+  return c.json({ settings: row?.value ?? { bookingEnabled:true, allowSameDay:false, minimumLeadMinutes:1440, maximumAdvanceDays:90, maxVehiclesPerBooking:10 }, updatedAt: row?.updated_at ?? null });
+});
+
+settingsRoutes.put("/booking", async (c) => {
+  const parsed = bookingSettings.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_booking_settings" }, 400);
+  const sql = getSql();
+  const payload = JSON.stringify(parsed.data);
+  await sql("INSERT INTO moms_ops.operational_settings (key,value,updated_at) VALUES ('booking', $1::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()", [payload]);
+  const rows = await sql("SELECT value, updated_at FROM moms_ops.operational_settings WHERE key='booking' LIMIT 1");
+  return c.json({ settings: rows[0]?.value ?? parsed.data, updatedAt: rows[0]?.updated_at ?? null });
+});
