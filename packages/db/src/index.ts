@@ -43,6 +43,12 @@ export async function vehicleSpecsDatabaseHealth(): Promise<void> {
 
 export * from "./schema.js";
 
+export async function applyOperationalSettingsMigration(): Promise<void> {
+  const sql = getSql();
+  await sql("CREATE TABLE IF NOT EXISTS moms_ops.operational_settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+}
+
+
 
 export async function applyStripeMonetaryEventsMigration(): Promise<void> {
   const sql = getSql();
