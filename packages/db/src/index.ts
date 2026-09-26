@@ -66,6 +66,22 @@ export async function applyOperationalSettingsMigration(): Promise<void> {
     PRIMARY KEY(channel,destination)
   )`;
   await sql`CREATE INDEX IF NOT EXISTS marketing_suppressions_destination_idx ON moms_ops.marketing_suppressions(destination)`;
+  await sql`CREATE TABLE IF NOT EXISTS moms_ops.leads (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    form_type text NOT NULL,
+    name text NOT NULL,
+    email text NOT NULL,
+    phone text,
+    message text NOT NULL,
+    company_name text,
+    vehicle_count text,
+    source text NOT NULL DEFAULT 'website',
+    status text NOT NULL DEFAULT 'new',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS leads_created_at_idx ON moms_ops.leads(created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS leads_status_idx ON moms_ops.leads(status,created_at DESC)`;
   await sql`CREATE TABLE IF NOT EXISTS moms_ops.booking_consents (
     booking_id uuid PRIMARY KEY REFERENCES moms_ops.bookings(id) ON DELETE CASCADE,
     terms_version text NOT NULL,
