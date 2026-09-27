@@ -82,6 +82,7 @@ export async function applyOperationalSettingsMigration(): Promise<void> {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS leads_created_at_idx ON moms_ops.leads(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS leads_status_idx ON moms_ops.leads(status,created_at DESC)`;
+  await sql`COMMENT ON TABLE moms_ops.leads IS 'Website contact, quote, and fleet inquiries surfaced in the MOMS operations dashboard'`;
   await sql`CREATE TABLE IF NOT EXISTS moms_ops.booking_consents (
     booking_id uuid PRIMARY KEY REFERENCES moms_ops.bookings(id) ON DELETE CASCADE,
     terms_version text NOT NULL,
