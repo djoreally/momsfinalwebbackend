@@ -95,3 +95,12 @@ export async function applyStripeMonetaryEventsMigration(): Promise<void> {
   await sql`COMMENT ON TABLE moms_ops.stripe_monetary_events IS 'Append-only Stripe evidence ledger. Operational payment state remains in moms_ops.payments.'`;
   await sql`INSERT INTO moms_ops.schema_migrations (filename) VALUES ('001_stripe_monetary_events.sql') ON CONFLICT (filename) DO NOTHING`;
 }
+
+export async function applyCampaignSettingsMigration(): Promise<void> {
+  const sql = getSql();
+  await sql`CREATE TABLE IF NOT EXISTS moms_ops.campaign_settings (
+    campaign_id text PRIMARY KEY,
+    config jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`;
+}
