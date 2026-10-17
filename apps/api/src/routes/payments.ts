@@ -23,6 +23,7 @@ paymentRoutes.post("/booking", async (c) => {
     return result ? c.json(result, 201) : c.json({ error: "booking_not_found" }, 404);
   } catch (error) {
     if (error instanceof Error && error.message === "booking_already_paid") return c.json({ error: "booking_already_paid" }, 409);
+    if (error instanceof Error && error.message === "payment_method_disabled") return c.json({ error: "payment_method_disabled" }, 422);
     throw error;
   }
 });

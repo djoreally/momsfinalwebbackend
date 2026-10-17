@@ -4,6 +4,7 @@ import { getAppointment } from "../repositories/appointments.js";
 import { getBooking } from "../repositories/bookings.js";
 import { getCustomer, setStripeCustomerId } from "../repositories/customer-vehicle.js";
 import { createPayment, attachPaymentIntent, getPaymentByAppointment, getPaymentByBooking, setPaymentMethodState } from "../repositories/payments.js";
+import { getSql } from "../../../../packages/db/src/index.js";
 
 export async function prepareAppointmentPayment(appointmentId: string) {
   const appointment = await getAppointment(appointmentId);
@@ -70,6 +71,10 @@ export async function prepareAppointmentPayment(appointmentId: string) {
 
 
 export async function chooseBookingPayment(bookingId: string, method: "pay_now" | "pay_at_appointment") {
+  const settingRows=await getSql()`SELECT value FROM moms_ops.operational_settings WHERE key='payments' LIMIT 1`;
+  const settings=(settingRows[0]?.value as {allowPayNow?:boolean;allowPayAtAppointment?:boolean}|undefined)??{allowPayNow:true,allowPayAtAppointment:true};
+  if(method==="pay_now"&&settings.allowPayNow===false)throw new Error("payment_method_disabled");
+  if(method==="pay_at_appointment"&&settings.allowPayAtAppointment===false)throw new Error("payment_method_disabled");
   const booking = await getBooking(bookingId);
   if (!booking) return null;
   const customer = await getCustomer(booking.customerId);
@@ -96,6 +101,7 @@ export async function chooseBookingPayment(bookingId: string, method: "pay_now" 
   const stripe = getStripe();
   if (payment.stripePaymentIntentId) {
     const existingIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+    if (existingIntent.status === "succeeded") throw new Error("booking_already_paid");
     if (existingIntent.status !== "canceled") {
       return {
         method, paymentId: payment.id, paymentIntentId: existingIntent.id,

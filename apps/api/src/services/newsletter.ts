@@ -23,6 +23,7 @@ function campaignHtml(c:any,token:string){const cta=c.cta_label&&c.cta_url?`<p><
 
 export async function subscribeNewsletter(email:string,source="website_footer"){
   const sql=getSql(),normalized=email.trim().toLowerCase();
+  await sql`DELETE FROM moms_ops.marketing_suppressions WHERE channel='email' AND destination=${normalized}`;
   const rows=await sql`INSERT INTO newsletter_subscribers(email,source,status,unsubscribed_at,updated_at) VALUES(${normalized},${source},'active',NULL,now()) ON CONFLICT(lower(email)) DO UPDATE SET status='active',unsubscribed_at=NULL,source=EXCLUDED.source,updated_at=now() RETURNING id,email,unsubscribe_token::text`;
   const s=rows[0] as any;if(!s)throw new Error("newsletter_subscriber_create_failed");
   const result=await sendEmail(s.email,"Welcome to MOMS Weekly Car Care",welcomeHtml(s.unsubscribe_token));
@@ -31,7 +32,13 @@ export async function subscribeNewsletter(email:string,source="website_footer"){
 }
 
 export async function unsubscribeNewsletter(token:string){
-  const sql=getSql();const rows=await sql`UPDATE newsletter_subscribers SET status='unsubscribed',unsubscribed_at=now(),updated_at=now() WHERE unsubscribe_token=${token}::uuid RETURNING id`;return rows.length>0;
+  const sql=getSql();
+  const rows=await sql`UPDATE newsletter_subscribers SET status='unsubscribed',unsubscribed_at=now(),updated_at=now() WHERE unsubscribe_token=${token}::uuid RETURNING id,email`;
+  const subscriber=rows[0] as {id:string;email:string}|undefined;
+  if(!subscriber)return false;
+  const normalized=subscriber.email.trim().toLowerCase();
+  await sql`INSERT INTO moms_ops.marketing_suppressions(channel,destination,reason,source) VALUES('email',${normalized},'customer_opt_out','newsletter_unsubscribe') ON CONFLICT(channel,destination) DO UPDATE SET reason='customer_opt_out',source='newsletter_unsubscribe',created_at=now()`;
+  return true;
 }
 
 export async function runWeeklyNewsletter(){
@@ -39,10 +46,10 @@ export async function runWeeklyNewsletter(){
   await sql`UPDATE newsletter_campaigns SET status='ready',updated_at=now() WHERE status='sending' AND updated_at < now()-interval '15 minutes'`;
   const claimed=await sql`UPDATE newsletter_campaigns SET status='sending',updated_at=now() WHERE id=(SELECT id FROM newsletter_campaigns WHERE status IN ('ready','failed') AND scheduled_for<=now() ORDER BY scheduled_for ASC LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,week_number,subject,preheader,headline,body_html,cta_label,cta_url`;
   const c=claimed[0] as any;if(!c)return {ok:true,sent:0,failed:0,message:"No newsletter due."};
-  const subscribers=await sql`SELECT s.id,s.email,s.unsubscribe_token::text FROM newsletter_subscribers s WHERE s.status='active' AND NOT EXISTS(SELECT 1 FROM newsletter_deliveries d WHERE d.campaign_id=${c.id}::uuid AND d.subscriber_id=s.id AND d.status='sent') ORDER BY s.subscribed_at ASC`;
+  const subscribers=await sql`SELECT s.id,s.email,s.unsubscribe_token::text FROM newsletter_subscribers s WHERE s.status='active' AND NOT EXISTS(SELECT 1 FROM moms_ops.marketing_suppressions ms WHERE ms.channel='email' AND ms.destination=lower(s.email)) AND NOT EXISTS(SELECT 1 FROM newsletter_deliveries d WHERE d.campaign_id=${c.id}::uuid AND d.subscriber_id=s.id AND d.status='sent') ORDER BY s.subscribed_at ASC`;
   let sent=0,failed=0;
   for(const s0 of subscribers as any[]){const result=await sendEmail(s0.email,c.subject,campaignHtml(c,s0.unsubscribe_token));if(result.success){sent++;await sql`INSERT INTO newsletter_deliveries(campaign_id,subscriber_id,provider_message_id,status,sent_at) VALUES(${c.id}::uuid,${s0.id}::uuid,${result.messageId||null},'sent',now()) ON CONFLICT(campaign_id,subscriber_id) DO UPDATE SET provider_message_id=EXCLUDED.provider_message_id,status='sent',sent_at=now(),error_message=NULL`;}else{failed++;await sql`INSERT INTO newsletter_deliveries(campaign_id,subscriber_id,status,error_message) VALUES(${c.id}::uuid,${s0.id}::uuid,'failed',${result.error||"Unknown send error"}) ON CONFLICT(campaign_id,subscriber_id) DO UPDATE SET status='failed',error_message=EXCLUDED.error_message`;}}
-  const remaining=await sql`SELECT count(*)::int AS count FROM newsletter_subscribers s WHERE s.status='active' AND NOT EXISTS(SELECT 1 FROM newsletter_deliveries d WHERE d.campaign_id=${c.id}::uuid AND d.subscriber_id=s.id AND d.status='sent')`;
+  const remaining=await sql`SELECT count(*)::int AS count FROM newsletter_subscribers s WHERE s.status='active' AND NOT EXISTS(SELECT 1 FROM moms_ops.marketing_suppressions ms WHERE ms.channel='email' AND ms.destination=lower(s.email)) AND NOT EXISTS(SELECT 1 FROM newsletter_deliveries d WHERE d.campaign_id=${c.id}::uuid AND d.subscriber_id=s.id AND d.status='sent')`;
   const complete=Number((remaining[0] as any)?.count??0)===0;
   await sql`UPDATE newsletter_campaigns SET status=${complete?'sent':'failed'},sent_at=CASE WHEN ${complete} THEN now() ELSE sent_at END,updated_at=now() WHERE id=${c.id}::uuid`;
   return {ok:complete,campaignWeek:c.week_number,subject:c.subject,sent,failed,remaining:Number((remaining[0] as any)?.count??0)};

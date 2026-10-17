@@ -11,6 +11,10 @@
     {
       "path": "/health/database",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/jobs/appointment-reminders",
+      "schedule": "0 12 * * *"
     }
   ],
   "git": {

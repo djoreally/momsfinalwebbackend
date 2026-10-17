@@ -29,7 +29,28 @@ stripeWebhookRoutes.post("/", async (c) => {
         const intent = event.data.object;
         await recordPaymentIntentEvent(event, intent);
         if (event.type === "payment_intent.succeeded") {
-          await updatePaymentStatusByIntent(intent.id, "paid", new Date());
+          let paid = await updatePaymentStatusByIntent(intent.id, "paid", new Date());
+          if (!paid && intent.metadata?.moms_payment_id) {
+            const { getSql } = await import("../../../../packages/db/src/index.js");
+            const linked = await getSql()`UPDATE moms_ops.payments SET stripe_payment_intent_id=${intent.id},status='paid',paid_at=now(),updated_at=now() WHERE id=${intent.metadata.moms_payment_id}::uuid RETURNING *`;
+            paid = linked[0] as any;
+          }
+          if (paid) {
+            const { getSql } = await import("../../../../packages/db/src/index.js");
+            await getSql()`WITH target AS (
+              SELECT invoice_id FROM moms_ops.payments WHERE id=${paid.id}::uuid AND invoice_id IS NOT NULL
+            ), totals AS (
+              SELECT p.invoice_id,COALESCE(SUM(p.amount_cents) FILTER (WHERE p.status='paid'),0)::int AS paid_cents
+              FROM moms_ops.payments p JOIN target t ON t.invoice_id=p.invoice_id GROUP BY p.invoice_id
+            )
+            UPDATE moms_ops.invoices i
+            SET amount_paid_cents=LEAST(i.total_cents,t.paid_cents),
+                amount_due_cents=GREATEST(0,i.total_cents-t.paid_cents),
+                status=CASE WHEN t.paid_cents>=i.total_cents THEN 'paid' ELSE i.status END,
+                paid_at=CASE WHEN t.paid_cents>=i.total_cents THEN COALESCE(i.paid_at,now()) ELSE i.paid_at END,
+                updated_at=now()
+            FROM totals t WHERE i.id=t.invoice_id`;
+          }
         } else if (event.type === "payment_intent.payment_failed") {
           await updatePaymentStatusByIntent(intent.id, "failed");
         } else if (event.type === "payment_intent.canceled") {

@@ -43,3 +43,35 @@ export async function ensureServiceOrdersForBooking(bookingId:string){
   `;
   return rows;
 }
+
+
+export async function getServiceOrdersForBooking(bookingId:string){
+  const sql=getSql();
+  return sql`
+    SELECT so.id,so.appointment_id AS "appointmentId",so.customer_id AS "customerId",
+           so.vehicle_id AS "vehicleId",so.status,so.notes,so.started_at AS "startedAt",
+           so.completed_at AS "completedAt",so.created_at AS "createdAt",
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'id',i.id,
+                 'bookingJobId',i.booking_job_id,
+                 'serviceId',i.service_id,
+                 'description',i.description,
+                 'quantity',i.quantity,
+                 'unitPriceCents',i.unit_price_cents,
+                 'totalCents',i.total_cents,
+                 'status',i.status,
+                 'position',i.position
+               )
+               ORDER BY i.position,i.created_at
+             ) FILTER (WHERE i.id IS NOT NULL),
+             '[]'::json
+           ) items
+    FROM moms_ops.service_orders so
+    LEFT JOIN moms_ops.service_order_items i ON i.service_order_id=so.id
+    WHERE so.appointment_id=${bookingId}::uuid
+    GROUP BY so.id
+    ORDER BY so.created_at
+  `;
+}
