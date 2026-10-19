@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { BookingConflictError, BookingValidationError, reserveBooking } from "../domain/bookings.js";
 import { getBooking } from "../repositories/bookings.js";
-import { sendBookingConfirmation } from "../services/booking-email.js";
+import { sendBookingConfirmation, retryDueBookingEmails } from "../services/booking-email.js";
 
 const createInput = z.object({
   customerId: z.string().uuid(),
@@ -26,8 +26,8 @@ bookingRoutes.post("/", async (c) => {
     const booking = await reserveBooking({ ...parsed.data, scheduledStart: new Date(parsed.data.scheduledStart) });
     const bookingId = String((booking as { id?: unknown }).id ?? "");
     if (bookingId) {
-      try { await sendBookingConfirmation(bookingId); }
-      catch (emailError) { console.error("Booking saved but confirmation email failed", { bookingId, emailError }); }
+      try { const notifications = await sendBookingConfirmation(bookingId); console.info("booking_email_notifications", { bookingId, notifications }); }
+      catch (emailError) { console.error("Booking saved but notification enqueue failed", { bookingId, emailError }); }
     }
     return c.json({ booking }, 201);
   } catch (error) {
@@ -35,6 +35,14 @@ bookingRoutes.post("/", async (c) => {
     if (error instanceof BookingValidationError) return c.json({ error: error.message }, 422);
     throw error;
   }
+});
+
+// Intended for an authenticated scheduler. Never callable without CRON_SECRET.
+bookingRoutes.get("/retry-due-notifications", async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || c.req.header("authorization") !== `Bearer ${secret}`) return c.json({error:"unauthorized"},401);
+  try { return c.json({processed:await retryDueBookingEmails()}); }
+  catch(error) { console.error("booking_email_retry_failed",error);return c.json({error:"retry_failed"},503); }
 });
 
 bookingRoutes.get("/:bookingId", async (c) => {
