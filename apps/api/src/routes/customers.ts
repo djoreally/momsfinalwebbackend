@@ -7,6 +7,7 @@ import {
   getCustomer,
   listCustomerVehicles,
 } from "../repositories/customer-vehicle.js";
+import { resolveVehicleSpec } from "../repositories/vehicle-specs.js";
 
 const customerInput = z.object({
   firstName: z.string().trim().min(1).max(100),
@@ -63,5 +64,25 @@ customerRoutes.post("/:customerId/vehicles", async (c) => {
   const parsed = vehicleInput.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "invalid_vehicle", issues: parsed.error.issues }, 400);
 
-  return c.json({ vehicle: await createVehicle({ customerId, ...parsed.data }) }, 201);
+  // Do not trust caller-supplied oil type or capacity: authoritative spec is server-resolved.
+  const { year, make, model, engine } = parsed.data;
+  if (!engine) return c.json({ error: "engine_required" }, 422);
+  let spec: Awaited<ReturnType<typeof resolveVehicleSpec>>;
+  try {
+    spec = await resolveVehicleSpec(year, make, model, engine);
+  } catch {
+    return c.json({ error: "vehicle_specs_unavailable" }, 503);
+  }
+  if (!spec || !spec.oilCapacity) return c.json({ error: "vehicle_oil_spec_unverified" }, 422);
+  const match = spec.oilCapacity.trim().match(/(\\d+(?:\\.\\d+)?)\\s*(liters?|litres?|l|quarts?|qts?)/i);
+  if (!match) return c.json({ error: "vehicle_oil_capacity_unverified" }, 422);
+  const amount = Number(match[1]);
+  const quarts = match[2].toLowerCase().startsWith("l") ? amount * 1.05668821 : amount;
+  if (!Number.isFinite(quarts) || quarts <= 0 || quarts > 30) return c.json({ error: "vehicle_oil_capacity_invalid" }, 422);
+  const trustedCapacity = (Math.round(quarts * 100) / 100).toFixed(2);
+  return c.json({ vehicle: await createVehicle({
+    customerId, ...parsed.data,
+    oilCapacityQuarts: trustedCapacity,
+    oilType: spec.engineOil?.trim() ? "verified" : null,
+  }) }, 201);
 });
