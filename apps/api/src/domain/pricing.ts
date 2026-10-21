@@ -13,6 +13,7 @@ export type PriceQuote = {
   extraQuarts: number;
   extraQuartPriceCents: number | null;
   extraQuartChargeCents: number;
+  wasteOilFeeCents: number;
   extraQuartWaived: boolean;
   processingFeePercent: number;
   processingFeeCents: number;
@@ -47,18 +48,19 @@ export async function quoteService(input: {
   const capacity = vehicle.oilCapacityQuarts === null ? null : Number(vehicle.oilCapacityQuarts);
   const included = service.includedQuarts === null ? null : Number(service.includedQuarts);
   const extraQuarts =
-    capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
+    capacity !== null && included !== null ? Math.max(0, Math.ceil((capacity - included - 1e-9) * 100) / 100) : 0;
 
   const extraQuartWaived = Boolean(input.waiveExtraQuarts && service.extraQuartWaivable);
   const extraQuartChargeCents =
     extraQuartWaived || service.extraQuartPriceCents === null
       ? 0
-      : Math.round(extraQuarts * service.extraQuartPriceCents);
+      : Math.ceil(extraQuarts) * service.extraQuartPriceCents;
 
   const social99Eligible = input.offerCode === SOCIAL99_OFFER_CODE && service.basePriceCents === 11900;
   const effectiveBasePriceCents = social99Eligible ? 9900 : service.basePriceCents;
   const discountCents = service.basePriceCents - effectiveBasePriceCents;
-  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
+  const wasteOilFeeCents = 400;
+  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents + wasteOilFeeCents;
   const processingFeePercent = Number(service.processingFeePercent);
   const processingFeeWaived = social99Eligible || Boolean(
     input.waiveProcessingFee && service.processingFeeWaivable,
@@ -78,6 +80,7 @@ export async function quoteService(input: {
     extraQuarts,
     extraQuartPriceCents: service.extraQuartPriceCents,
     extraQuartChargeCents,
+    wasteOilFeeCents,
     extraQuartWaived,
     processingFeePercent,
     processingFeeCents,
@@ -105,11 +108,12 @@ export async function previewServicePrice(input: {
   const extraQuarts =
     capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
   const extraQuartChargeCents =
-    service.extraQuartPriceCents === null ? 0 : Math.round(extraQuarts * service.extraQuartPriceCents);
+    service.extraQuartPriceCents === null ? 0 : Math.ceil(extraQuarts) * service.extraQuartPriceCents;
   const social99Eligible = input.offerCode === SOCIAL99_OFFER_CODE && service.basePriceCents === 11900;
   const effectiveBasePriceCents = social99Eligible ? 9900 : service.basePriceCents;
   const discountCents = service.basePriceCents - effectiveBasePriceCents;
-  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
+  const wasteOilFeeCents = 400;
+  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents + wasteOilFeeCents;
   const processingFeePercent = Number(service.processingFeePercent);
   const processingFeeCents = social99Eligible ? 0 : centsForPercent(serviceSubtotalCents, processingFeePercent);
   const totalCents = serviceSubtotalCents + processingFeeCents;
@@ -123,6 +127,7 @@ export async function previewServicePrice(input: {
     extraQuarts,
     extraQuartPriceCents: service.extraQuartPriceCents,
     extraQuartChargeCents,
+    wasteOilFeeCents,
     processingFeePercent,
     processingFeeCents,
     preTaxTotalCents: totalCents,
