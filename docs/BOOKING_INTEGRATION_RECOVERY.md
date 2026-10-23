@@ -14,14 +14,23 @@ Connect both booking experiences to the same supported MOMS booking business log
 
 Before a customer can reserve a time, the backend must validate the actual service address against MOMS's authoritative service-area rules. Client-side checks may improve UX but are not authoritative.
 
-Required behavior:
+### Existing code evidence and policy conflict to resolve
+
+- The public website has `src/app/api/service-area-check/route.ts`, which geocodes an address with Nominatim and calculates distance from coordinates `40.1556519, -75.2238249` using a hard-coded 25-mile radius.
+- `src/components/booking/ServiceAreaPrecheck.tsx` describes a 25-mile area from ZIP 19002. Its “Continue to Booking” link is rendered regardless of whether the result is in-area, so this is a UX precheck, not a booking-enforcement boundary.
+- The website also proxies operations settings at `/v1/settings/service-area` and exposes a settings model with enabled / allowed states / allowed postal codes / enforcement mode. The backend source of that settings route and its relationship to the hard-coded radius still need to be verified.
+- These are potentially different coverage policies. Do not silently choose one or assume they are equivalent. Resolve the policy precedence and ensure there is one authoritative backend decision before enabling enforcement.
+
+### Required behavior
+
 - Validate normalized service address / postal code on the server before creating a booking or preparing payment.
 - Reject out-of-area addresses with a stable, customer-safe error and no booking, payment intent, or confirmation notification.
 - Fail closed when the service-area authority is unavailable or cannot make a decision.
 - Reuse the same service-area validator for public and authenticated internal booking flows. Any internal override must be explicit, authorized, auditable, and separate from ordinary booking.
+- Avoid relying on a browser-only precheck or trusting a client-supplied `inServiceArea` boolean.
 - Add tests for in-area, out-of-area, malformed/incomplete address, unavailable validator, and boundary cases.
 
-Important discovery: the current `reserveBooking` domain flow quotes jobs and checks schedule conflicts before calling `createBooking`, but the inspected path has no service-area validation. The authoritative coverage rules/source have not yet been established from the repository. Do not invent ZIP codes, mileage boundaries, or an allowlist; identify the existing business source of truth before implementing the validator.
+The current backend `reserveBooking` domain flow quotes jobs and checks schedule conflicts before calling `createBooking`, but the inspected path has no service-area validation. First reconcile the existing radius checker with the operations settings model and document the authoritative rule; do not invent ZIP codes, mileage boundaries, or an allowlist.
 
 ## Gate 1 — One booking path
 
@@ -60,7 +69,7 @@ Important discovery: the current `reserveBooking` domain flow quotes jobs and ch
 
 ## Implementation order
 
-1. Locate and document the authoritative service-area policy/source. Do not guess coverage.
+1. Reconcile the 25-mile geocoding check with the operations service-area settings and decide the authoritative rule.
 2. Implement the shared server-side service-area gate and tests.
 3. Add durable booking idempotency and replay/conflict tests.
 4. Verify website and authenticated internal callers converge on the same domain path.
