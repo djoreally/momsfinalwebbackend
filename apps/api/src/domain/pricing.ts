@@ -2,6 +2,41 @@ import { getService } from "../repositories/services.js";
 import { findVehicleForCustomer } from "../repositories/customer-vehicle.js";
 
 export const SOCIAL99_OFFER_CODE = "SOCIAL99" as const;
+export const SOCIAL89_OFFER_CODE = "SOCIAL89" as const;
+export const WIPERS119_OFFER_CODE = "WIPERS119" as const;
+
+export const FACEBOOK_OFFER_CODES = [
+  SOCIAL99_OFFER_CODE,
+  SOCIAL89_OFFER_CODE,
+  WIPERS119_OFFER_CODE,
+] as const;
+export type FacebookOfferCode = (typeof FACEBOOK_OFFER_CODES)[number];
+
+/**
+ * Facebook-only offers. Every one anchors to the $119 standard
+ * full-synthetic price: SOCIAL99 and SOCIAL89 set a flat Facebook price,
+ * WIPERS119 keeps the regular $119 price and adds free wiper blades at
+ * the appointment. Discounted offers waive the processing fee;
+ * WIPERS119 is priced exactly like a regular booking.
+ */
+const FACEBOOK_OFFER_BASE_PRICE_CENTS: Record<FacebookOfferCode, number> = {
+  SOCIAL99: 9900,
+  SOCIAL89: 8900,
+  WIPERS119: 11900,
+};
+
+function resolveFacebookOffer(
+  offerCode: string | null | undefined,
+  basePriceCents: number,
+): { code: FacebookOfferCode; effectiveBasePriceCents: number; feeWaived: boolean } | null {
+  const code = FACEBOOK_OFFER_CODES.find((candidate) => candidate === offerCode) ?? null;
+  if (!code || basePriceCents !== 11900) return null;
+  return {
+    code,
+    effectiveBasePriceCents: FACEBOOK_OFFER_BASE_PRICE_CENTS[code],
+    feeWaived: code !== WIPERS119_OFFER_CODE,
+  };
+}
 
 export type PriceQuote = {
   serviceId: string;
@@ -55,12 +90,12 @@ export async function quoteService(input: {
       ? 0
       : Math.round(extraQuarts * service.extraQuartPriceCents);
 
-  const social99Eligible = input.offerCode === SOCIAL99_OFFER_CODE && service.basePriceCents === 11900;
-  const effectiveBasePriceCents = social99Eligible ? 9900 : service.basePriceCents;
+  const offer = resolveFacebookOffer(input.offerCode, service.basePriceCents);
+  const effectiveBasePriceCents = offer ? offer.effectiveBasePriceCents : service.basePriceCents;
   const discountCents = service.basePriceCents - effectiveBasePriceCents;
   const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeWaived = social99Eligible || Boolean(
+  const processingFeeWaived = Boolean(offer?.feeWaived) || Boolean(
     input.waiveProcessingFee && service.processingFeeWaivable,
   );
   const processingFeeCents = processingFeeWaived
@@ -86,7 +121,7 @@ export async function quoteService(input: {
     totalCents: preTaxTotalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2",
-    offerCodeApplied: social99Eligible ? SOCIAL99_OFFER_CODE : null,
+    offerCodeApplied: offer ? offer.code : null,
     discountCents,
   };
 }
@@ -106,12 +141,12 @@ export async function previewServicePrice(input: {
     capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
   const extraQuartChargeCents =
     service.extraQuartPriceCents === null ? 0 : Math.round(extraQuarts * service.extraQuartPriceCents);
-  const social99Eligible = input.offerCode === SOCIAL99_OFFER_CODE && service.basePriceCents === 11900;
-  const effectiveBasePriceCents = social99Eligible ? 9900 : service.basePriceCents;
+  const offer = resolveFacebookOffer(input.offerCode, service.basePriceCents);
+  const effectiveBasePriceCents = offer ? offer.effectiveBasePriceCents : service.basePriceCents;
   const discountCents = service.basePriceCents - effectiveBasePriceCents;
   const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeCents = social99Eligible ? 0 : centsForPercent(serviceSubtotalCents, processingFeePercent);
+  const processingFeeCents = offer?.feeWaived ? 0 : centsForPercent(serviceSubtotalCents, processingFeePercent);
   const totalCents = serviceSubtotalCents + processingFeeCents;
 
   return {
@@ -129,7 +164,7 @@ export async function previewServicePrice(input: {
     totalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2" as const,
-    offerCodeApplied: social99Eligible ? SOCIAL99_OFFER_CODE : null,
+    offerCodeApplied: offer ? offer.code : null,
     discountCents,
     isExact: capacity !== null || service.includedQuarts === null,
   };

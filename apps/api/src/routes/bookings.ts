@@ -14,7 +14,7 @@ const createInput = z.object({
   serviceState: z.string().trim().min(2).max(50),
   servicePostalCode: z.string().trim().min(3).max(20),
   notes: z.string().trim().max(2000).optional().nullable(),
-  offerCode: z.literal("SOCIAL99").optional().nullable(),
+  offerCode: z.enum(["SOCIAL99", "SOCIAL89", "WIPERS119"]).optional().nullable(),
 });
 
 export const bookingRoutes = new Hono();
