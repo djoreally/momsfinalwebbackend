@@ -19,6 +19,15 @@ const createInput = z.object({
 
 export const bookingRoutes = new Hono();
 
+// Static booking-flow configuration consumed by the frontend booking form.
+// Registered before /:bookingId so "config" is never captured as a booking id.
+bookingRoutes.get("/config", (c) => {
+  return c.json({
+    payments: { allowPayNow: true, allowPayAtAppointment: true, defaultMethod: "pay_at_appointment" },
+    consent: { termsVersion: "2026-09-25", termsUrl: "/terms", privacyUrl: "/privacy-policy", requireTerms: true, requirePrivacy: true },
+  });
+});
+
 bookingRoutes.post("/", async (c) => {
   const parsed = createInput.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "invalid_booking", issues: parsed.error.issues }, 400);
