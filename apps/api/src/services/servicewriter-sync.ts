@@ -120,8 +120,10 @@ export async function retryDueServiceWriterBookings(limit = 20): Promise<{ attem
   const sql = getSql();
   const rows = await sql`
     SELECT booking_id FROM moms_ops.servicewriter_sync_outbox
-    WHERE status IN ('pending','failed')
-      AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+    WHERE (
+        (status IN ('pending','failed') AND (next_attempt_at IS NULL OR next_attempt_at <= now()))
+        OR (status='processing' AND updated_at < now() - interval '5 minutes')
+      )
       AND attempts < 12
     ORDER BY created_at ASC
     LIMIT ${Math.max(1, Math.min(limit, 100))}
