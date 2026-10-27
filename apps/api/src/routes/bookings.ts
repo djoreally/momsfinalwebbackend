@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { BookingConflictError, BookingValidationError, reserveBooking } from "../domain/bookings.js";
+import { getOffer } from "../domain/offers.js";
 import { getBooking } from "../repositories/bookings.js";
 import { sendBookingConfirmation, retryDueBookingEmails } from "../services/booking-email.js";
 
@@ -14,7 +15,11 @@ const createInput = z.object({
   serviceState: z.string().trim().min(2).max(50),
   servicePostalCode: z.string().trim().min(3).max(20),
   notes: z.string().trim().max(2000).optional().nullable(),
-  offerCode: z.enum(["SOCIAL99", "SOCIAL89", "WIPERS119"]).optional().nullable(),
+  // Validated against the offer registry (domain/offers.ts), not a fixed
+  // enum: any registered code is accepted, anything else is rejected
+  // with offer_not_recognized. Registry rule violations at booking time
+  // surface from the domain as 422s.
+  offerCode: z.string().trim().min(1).max(64).optional().nullable(),
 });
 
 export const bookingRoutes = new Hono();
@@ -31,6 +36,9 @@ bookingRoutes.get("/config", (c) => {
 bookingRoutes.post("/", async (c) => {
   const parsed = createInput.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "invalid_booking", issues: parsed.error.issues }, 400);
+  if (parsed.data.offerCode && !getOffer(parsed.data.offerCode)) {
+    return c.json({ error: "offer_not_recognized" }, 400);
+  }
   try {
     const booking = await reserveBooking({ ...parsed.data, scheduledStart: new Date(parsed.data.scheduledStart) });
     const bookingId = String((booking as { id?: unknown }).id ?? "");
