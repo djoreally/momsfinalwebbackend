@@ -4,6 +4,7 @@ import { BookingConflictError, BookingValidationError, reserveBooking } from "..
 import { getOffer } from "../domain/offers.js";
 import { getBooking } from "../repositories/bookings.js";
 import { sendBookingConfirmation, retryDueBookingEmails } from "../services/booking-email.js";
+import { dispatchServiceWriterBooking, retryDueServiceWriterBookings } from "../services/servicewriter-sync.js";
 
 const createInput = z.object({
   customerId: z.string().uuid(),
@@ -43,6 +44,8 @@ bookingRoutes.post("/", async (c) => {
     const booking = await reserveBooking({ ...parsed.data, scheduledStart: new Date(parsed.data.scheduledStart) });
     const bookingId = String((booking as { id?: unknown }).id ?? "");
     if (bookingId) {
+      try { const synced = await dispatchServiceWriterBooking(bookingId); console.info("servicewriter_booking_sync", { bookingId, synced }); }
+      catch (syncError) { console.error("Booking saved but Service Writer sync failed", { bookingId, syncError }); }
       try { const notifications = await sendBookingConfirmation(bookingId); console.info("booking_email_notifications", { bookingId, notifications }); }
       catch (emailError) { console.error("Booking saved but notification enqueue failed", { bookingId, emailError }); }
     }
@@ -52,6 +55,14 @@ bookingRoutes.post("/", async (c) => {
     if (error instanceof BookingValidationError) return c.json({ error: error.message }, 422);
     throw error;
   }
+});
+
+// Retry failed or newly queued Service Writer deliveries. Protected by CRON_SECRET.
+bookingRoutes.get("/retry-due-servicewriter-sync", async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || c.req.header("authorization") !== `Bearer ${secret}`) return c.json({ error: "unauthorized" }, 401);
+  try { return c.json(await retryDueServiceWriterBookings()); }
+  catch (error) { console.error("servicewriter_sync_retry_failed", error); return c.json({ error: "retry_failed" }, 503); }
 });
 
 // Intended for an authenticated scheduler. Never callable without CRON_SECRET.

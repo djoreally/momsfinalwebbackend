@@ -95,3 +95,29 @@ export async function applyStripeMonetaryEventsMigration(): Promise<void> {
   await sql`COMMENT ON TABLE moms_ops.stripe_monetary_events IS 'Append-only Stripe evidence ledger. Operational payment state remains in moms_ops.payments.'`;
   await sql`INSERT INTO moms_ops.schema_migrations (filename) VALUES ('001_stripe_monetary_events.sql') ON CONFLICT (filename) DO NOTHING`;
 }
+
+export async function applyServiceWriterSyncMigration(): Promise<void> {
+  const sql = getSql();
+  await sql`CREATE TABLE IF NOT EXISTS moms_ops.servicewriter_sync_outbox (
+    booking_id uuid PRIMARY KEY REFERENCES moms_ops.bookings(id) ON DELETE RESTRICT,
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','failed','synced')),
+    attempts integer NOT NULL DEFAULT 0,
+    external_appointment_id text,
+    last_error text,
+    next_attempt_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    synced_at timestamptz
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS servicewriter_sync_outbox_retry_idx
+    ON moms_ops.servicewriter_sync_outbox(status, next_attempt_at, created_at)`;
+  await sql`INSERT INTO moms_ops.servicewriter_sync_outbox (booking_id, status)
+    SELECT b.id, 'pending'
+    FROM moms_ops.bookings b
+    WHERE b.status = 'confirmed'
+      AND b.scheduled_start >= now()
+      AND b.scheduled_start < now() + interval '7 days'
+    ON CONFLICT (booking_id) DO NOTHING`;
+  await sql`INSERT INTO moms_ops.schema_migrations (filename)
+    VALUES ('002_servicewriter_sync_outbox.sql') ON CONFLICT (filename) DO NOTHING`;
+}

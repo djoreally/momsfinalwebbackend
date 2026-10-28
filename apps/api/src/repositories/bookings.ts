@@ -39,9 +39,15 @@ export async function createBooking(input: CreateBookingInput) {
       CROSS JOIN LATERAL jsonb_to_recordset(${jobsJson}::jsonb)
         AS j("vehicleId" text,"serviceId" text,"quotedPriceCents" integer,"durationMinutes" integer,"position" integer)
       RETURNING *
+    ), new_sync AS (
+      INSERT INTO moms_ops.servicewriter_sync_outbox (booking_id, status)
+      SELECT b.id, 'pending' FROM new_booking b
+      ON CONFLICT (booking_id) DO NOTHING
+      RETURNING booking_id
     )
     SELECT row_to_json(b) AS booking,
-           COALESCE((SELECT json_agg(j ORDER BY j.position) FROM new_jobs j),'[]'::json) AS jobs
+           COALESCE((SELECT json_agg(j ORDER BY j.position) FROM new_jobs j),'[]'::json) AS jobs,
+           (SELECT count(*) FROM new_sync) AS sync_queued
     FROM new_booking b
   `;
   const row = rows[0] as { booking: Record<string, unknown>; jobs: unknown[] } | undefined;
