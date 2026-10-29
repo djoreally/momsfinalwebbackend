@@ -1,42 +1,15 @@
 import { getService } from "../repositories/services.js";
 import { findVehicleForCustomer } from "../repositories/customer-vehicle.js";
+import { applyOffer } from "./offers.js";
 
-export const SOCIAL99_OFFER_CODE = "SOCIAL99" as const;
-export const SOCIAL89_OFFER_CODE = "SOCIAL89" as const;
-export const WIPERS119_OFFER_CODE = "WIPERS119" as const;
-
-export const FACEBOOK_OFFER_CODES = [
+export {
   SOCIAL99_OFFER_CODE,
   SOCIAL89_OFFER_CODE,
   WIPERS119_OFFER_CODE,
-] as const;
-export type FacebookOfferCode = (typeof FACEBOOK_OFFER_CODES)[number];
-
-/**
- * Facebook-only offers. Every one anchors to the $119 standard
- * full-synthetic price: SOCIAL99 and SOCIAL89 set a flat Facebook price,
- * WIPERS119 keeps the regular $119 price and adds free wiper blades at
- * the appointment. Discounted offers waive the processing fee;
- * WIPERS119 is priced exactly like a regular booking.
- */
-const FACEBOOK_OFFER_BASE_PRICE_CENTS: Record<FacebookOfferCode, number> = {
-  SOCIAL99: 9900,
-  SOCIAL89: 8900,
-  WIPERS119: 11900,
-};
-
-function resolveFacebookOffer(
-  offerCode: string | null | undefined,
-  basePriceCents: number,
-): { code: FacebookOfferCode; effectiveBasePriceCents: number; feeWaived: boolean } | null {
-  const code = FACEBOOK_OFFER_CODES.find((candidate) => candidate === offerCode) ?? null;
-  if (!code || basePriceCents !== 11900) return null;
-  return {
-    code,
-    effectiveBasePriceCents: FACEBOOK_OFFER_BASE_PRICE_CENTS[code],
-    feeWaived: code !== WIPERS119_OFFER_CODE,
-  };
-}
+  FACEBOOK_OFFER_CODES,
+} from "./offers.js";
+export type { FacebookOfferCode } from "./offers.js";
+export { OfferError } from "./offers.js";
 
 export type PriceQuote = {
   serviceId: string;
@@ -58,10 +31,26 @@ export type PriceQuote = {
   pricingVersion: "moms-v2";
   offerCodeApplied: string | null;
   discountCents: number;
+  offerNote: string | null;
 };
 
 function centsForPercent(amountCents: number, percent: number) {
   return Math.round(amountCents * (percent / 100));
+}
+
+/**
+ * Applies an offer code to a single standard-priced quote through the
+ * offer registry, in provisional mode: weekday / min-jobs / single-job
+ * rules are confirmed at booking time (see domain/offers.ts). Unknown
+ * codes throw OfferError("offer_not_recognized") — a promised price never
+ * silently becomes the standard price. An offer attached to a
+ * non-eligible service (standard base price other than $119) leaves the
+ * quote at standard pricing with `offerCodeApplied: null`, as before.
+ */
+function applyOfferToQuote(quote: PriceQuote, offerCode: string | null | undefined): PriceQuote {
+  if (!offerCode) return quote;
+  const { quotes, offerNote } = applyOffer([quote], offerCode, { mode: "provisional" });
+  return { ...quotes[0], offerNote };
 }
 
 export async function quoteService(input: {
@@ -90,24 +79,21 @@ export async function quoteService(input: {
       ? 0
       : Math.round(extraQuarts * service.extraQuartPriceCents);
 
-  const offer = resolveFacebookOffer(input.offerCode, service.basePriceCents);
-  const effectiveBasePriceCents = offer ? offer.effectiveBasePriceCents : service.basePriceCents;
-  const discountCents = service.basePriceCents - effectiveBasePriceCents;
-  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeWaived = Boolean(offer?.feeWaived) || Boolean(
+  const processingFeeWaived = Boolean(
     input.waiveProcessingFee && service.processingFeeWaivable,
   );
+  const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
   const processingFeeCents = processingFeeWaived
     ? 0
     : centsForPercent(serviceSubtotalCents, processingFeePercent);
   const preTaxTotalCents = serviceSubtotalCents + processingFeeCents;
 
-  return {
+  const standardQuote: PriceQuote = {
     serviceId: service.id,
     vehicleId: vehicle.id,
     currency: "usd",
-    basePriceCents: effectiveBasePriceCents,
+    basePriceCents: service.basePriceCents,
     oilCapacityQuarts: capacity,
     includedQuarts: included,
     extraQuarts,
@@ -121,9 +107,12 @@ export async function quoteService(input: {
     totalCents: preTaxTotalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2",
-    offerCodeApplied: offer ? offer.code : null,
-    discountCents,
+    offerCodeApplied: null,
+    discountCents: 0,
+    offerNote: null,
   };
+
+  return applyOfferToQuote(standardQuote, input.offerCode);
 }
 
 
@@ -141,18 +130,15 @@ export async function previewServicePrice(input: {
     capacity !== null && included !== null ? Math.max(0, capacity - included) : 0;
   const extraQuartChargeCents =
     service.extraQuartPriceCents === null ? 0 : Math.round(extraQuarts * service.extraQuartPriceCents);
-  const offer = resolveFacebookOffer(input.offerCode, service.basePriceCents);
-  const effectiveBasePriceCents = offer ? offer.effectiveBasePriceCents : service.basePriceCents;
-  const discountCents = service.basePriceCents - effectiveBasePriceCents;
-  const serviceSubtotalCents = effectiveBasePriceCents + extraQuartChargeCents;
   const processingFeePercent = Number(service.processingFeePercent);
-  const processingFeeCents = offer?.feeWaived ? 0 : centsForPercent(serviceSubtotalCents, processingFeePercent);
+  const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
+  const processingFeeCents = centsForPercent(serviceSubtotalCents, processingFeePercent);
   const totalCents = serviceSubtotalCents + processingFeeCents;
 
-  return {
+  const standardQuote = {
     serviceId: service.id,
     currency: "usd" as const,
-    basePriceCents: effectiveBasePriceCents,
+    basePriceCents: service.basePriceCents,
     oilCapacityQuarts: capacity,
     includedQuarts: included,
     extraQuarts,
@@ -160,12 +146,18 @@ export async function previewServicePrice(input: {
     extraQuartChargeCents,
     processingFeePercent,
     processingFeeCents,
+    processingFeeWaived: false,
     preTaxTotalCents: totalCents,
     totalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2" as const,
-    offerCodeApplied: offer ? offer.code : null,
-    discountCents,
+    offerCodeApplied: null,
+    discountCents: 0,
     isExact: capacity !== null || service.includedQuarts === null,
+    offerNote: null as string | null,
   };
+
+  if (!input.offerCode) return standardQuote;
+  const { quotes, offerNote } = applyOffer([standardQuote], input.offerCode, { mode: "provisional" });
+  return { ...quotes[0], offerNote };
 }

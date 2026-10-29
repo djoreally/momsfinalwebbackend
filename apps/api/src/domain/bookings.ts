@@ -1,4 +1,5 @@
-import { quoteService, FACEBOOK_OFFER_CODES } from "./pricing.js";
+import { quoteService, type PriceQuote } from "./pricing.js";
+import { applyOffer, getOffer, OfferError } from "./offers.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
 
@@ -18,23 +19,41 @@ export async function reserveBooking(input: {
   offerCode?: string | null;
 }) {
   if (!input.jobs.length) throw new BookingValidationError("booking_requires_job");
-  const hasFacebookOffer = FACEBOOK_OFFER_CODES.some((code) => code === input.offerCode);
-  if (hasFacebookOffer && input.jobs.length !== 1) throw new BookingValidationError("facebook_offer_single_vehicle_only");
+
+  // Offer rules come from the registry (domain/offers.ts). An unknown
+  // code is rejected before any pricing work — a promised price never
+  // silently becomes the standard price.
+  const offer = input.offerCode ? getOffer(input.offerCode) : null;
+  if (input.offerCode && !offer) throw new BookingValidationError("offer_not_recognized");
 
   const unique = new Set(input.jobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
   if (unique.size !== input.jobs.length) throw new BookingValidationError("duplicate_booking_job");
 
+  // Jobs are priced at standard rates first; the registry then confirms
+  // what the offer code does to those quotes.
   const quotes = await Promise.all(input.jobs.map((job) => quoteService({
     customerId: input.customerId,
     vehicleId: job.vehicleId,
     serviceId: job.serviceId,
-    offerCode: input.offerCode,
   })));
   if (quotes.some((quote) => !quote)) throw new BookingValidationError("quote_not_available");
 
-  const resolved = quotes.filter((quote): quote is NonNullable<typeof quote> => Boolean(quote));
-  if (hasFacebookOffer && resolved.some((quote) => quote.offerCodeApplied !== input.offerCode)) {
-    throw new BookingValidationError("facebook_offer_not_applicable");
+  const standardQuotes = quotes.filter((quote): quote is PriceQuote => Boolean(quote));
+  let resolved = standardQuotes;
+  if (offer) {
+    try {
+      // Booking mode enforces the registry rules against this booking:
+      // single-job-only offers reject multi-job bookings, min-jobs and
+      // weekday (America/New_York, against scheduledStart) are checked,
+      // and an offer attached to a non-eligible job fails the booking.
+      resolved = applyOffer(standardQuotes, offer.code, {
+        scheduledStart: input.scheduledStart,
+        mode: "booking",
+      }).quotes;
+    } catch (error) {
+      if (error instanceof OfferError) throw new BookingValidationError(error.code);
+      throw error;
+    }
   }
   const durationMinutes = resolved.reduce((sum, quote) => sum + quote.durationMinutes, 0);
   const quotedTotalCents = resolved.reduce((sum, quote) => sum + quote.totalCents, 0);
