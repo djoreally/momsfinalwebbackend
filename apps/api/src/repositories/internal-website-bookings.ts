@@ -5,9 +5,17 @@ import { getSql } from "../../../../packages/db/src/index.js";
  *
  * Service Writer pulls website bookings from here over the authenticated
  * /internal/website-bookings routes and stamps each booking after it has
- * created the corresponding Service Writer appointment. Nothing here ever
- * pushes automatically; these functions only read the queue and record the
- * stamp / never-push flag a human action produced.
+ * created the corresponding Service Writer appointment. The manual flow
+ * only reads the queue and records the stamp / never-push flag a human
+ * action produced.
+ *
+ * Auto-push extension (Ty, 2026-10-29): a PREPAID website booking is
+ * pushed automatically when its payment completes (see
+ * services/service-writer-auto-push.ts, hung off the Stripe webhook).
+ * The functions at the bottom of this file support that trigger: an
+ * atomic claim so webhook retries cannot double-push, and a staff-visible
+ * record of the last failed attempt. A failed auto-push never stamps the
+ * booking — it stays in the unpushed queue for the manual flow.
  *
  * There is no stored booking source channel in this schema: the Facebook
  * offer code accepted at booking creation is used for pricing only and is
@@ -34,6 +42,8 @@ export type InternalWebsiteBooking = {
   pushedSwAppointmentId: string | null;
   pushedAt: string | null;
   neverPush: boolean;
+  autoPushLastError: string | null;
+  autoPushLastAttemptAt: string | null;
 };
 
 type BookingRow = Record<string, unknown>;
@@ -80,6 +90,8 @@ function mapRow(row: BookingRow): InternalWebsiteBooking {
     pushedSwAppointmentId: (row.pushedSwAppointmentId as string | null) ?? null,
     pushedAt: toIsoString(row.pushedAt),
     neverPush: Boolean(row.neverPush),
+    autoPushLastError: (row.autoPushLastError as string | null) ?? null,
+    autoPushLastAttemptAt: toIsoString(row.autoPushLastAttemptAt),
   };
 }
 
@@ -100,6 +112,8 @@ export async function listInternalWebsiteBookings(filter: InternalWebsiteBooking
       b.pushed_sw_appointment_id AS "pushedSwAppointmentId",
       b.pushed_at AS "pushedAt",
       b.never_push AS "neverPush",
+      b.auto_push_last_error AS "autoPushLastError",
+      b.auto_push_last_attempt_at AS "autoPushLastAttemptAt",
       c.first_name AS "firstName",
       c.last_name AS "lastName",
       c.email AS "email",
@@ -150,9 +164,13 @@ export async function getInternalWebsiteBooking(bookingId: string) {
   const rows = await sql`
     SELECT
       b.id,
+      b.status,
       b.pushed_sw_appointment_id AS "pushedSwAppointmentId",
       b.pushed_at AS "pushedAt",
-      b.never_push AS "neverPush"
+      b.never_push AS "neverPush",
+      b.auto_push_claimed_at AS "autoPushClaimedAt",
+      b.auto_push_last_error AS "autoPushLastError",
+      b.auto_push_last_attempt_at AS "autoPushLastAttemptAt"
     FROM moms_ops.bookings b
     WHERE b.id = ${bookingId}::uuid
     LIMIT 1
@@ -161,9 +179,13 @@ export async function getInternalWebsiteBooking(bookingId: string) {
   if (!row) return null;
   return {
     id: String(row.id),
+    status: String(row.status ?? ""),
     pushedSwAppointmentId: (row.pushedSwAppointmentId as string | null) ?? null,
     pushedAt: toIsoString(row.pushedAt),
     neverPush: Boolean(row.neverPush),
+    autoPushClaimedAt: toIsoString(row.autoPushClaimedAt),
+    autoPushLastError: (row.autoPushLastError as string | null) ?? null,
+    autoPushLastAttemptAt: toIsoString(row.autoPushLastAttemptAt),
   };
 }
 
@@ -188,6 +210,84 @@ export async function stampInternalWebsiteBookingPush(bookingId: string, swAppoi
     pushedSwAppointmentId: String(row.pushedSwAppointmentId),
     pushedAt: toIsoString(row.pushedAt) ?? "",
   };
+}
+
+/**
+ * How long an auto-push claim is considered live. A claim older than this
+ * is stale (the attempt crashed or the caller died) and may be re-claimed,
+ * so a booking can never be wedged out of both the automatic and the
+ * manual flow. Mirrored by isAutoPushClaimLive in
+ * services/service-writer-auto-push.ts.
+ */
+export const AUTO_PUSH_CLAIM_STALE_MINUTES = 15;
+
+/**
+ * Atomically claim a booking for one auto-push attempt. The claim lands
+ * only when the booking is still pushable by the automatic path:
+ * not already pushed, not never-push, and not cancelled. Returns true
+ * when THIS caller won the claim.
+ */
+export async function claimInternalWebsiteBookingAutoPush(bookingId: string) {
+  const sql = getSql();
+  const rows = await sql`
+    UPDATE moms_ops.bookings
+    SET auto_push_claimed_at = now(),
+        auto_push_last_attempt_at = now(),
+        updated_at = now()
+    WHERE id = ${bookingId}::uuid
+      AND pushed_sw_appointment_id IS NULL
+      AND never_push = false
+      AND status <> 'cancelled'
+      AND (
+        auto_push_claimed_at IS NULL
+        OR auto_push_claimed_at < now() - (${AUTO_PUSH_CLAIM_STALE_MINUTES} * interval '1 minute')
+      )
+    RETURNING id
+  `;
+  return (rows as BookingRow[]).length > 0;
+}
+
+/**
+ * Record why an auto-push attempt failed and release the claim so the
+ * booking stays fully available to the manual queue (and to a later
+ * automatic retry once the blocker is fixed). Never stamps anything.
+ */
+export async function recordInternalWebsiteBookingAutoPushFailure(bookingId: string, reason: string) {
+  const sql = getSql();
+  const rows = await sql`
+    UPDATE moms_ops.bookings
+    SET auto_push_claimed_at = NULL,
+        auto_push_last_attempt_at = now(),
+        auto_push_last_error = ${reason.slice(0, 2000)},
+        updated_at = now()
+    WHERE id = ${bookingId}::uuid
+      AND pushed_sw_appointment_id IS NULL
+    RETURNING
+      id,
+      auto_push_last_error AS "autoPushLastError",
+      auto_push_last_attempt_at AS "autoPushLastAttemptAt"
+  `;
+  const row = (rows as BookingRow[])[0];
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    autoPushLastError: (row.autoPushLastError as string | null) ?? null,
+    autoPushLastAttemptAt: toIsoString(row.autoPushLastAttemptAt),
+  };
+}
+
+/** Clear the claim + failure record after a successful auto-push. */
+export async function recordInternalWebsiteBookingAutoPushSuccess(bookingId: string) {
+  const sql = getSql();
+  const rows = await sql`
+    UPDATE moms_ops.bookings
+    SET auto_push_claimed_at = NULL,
+        auto_push_last_error = NULL,
+        updated_at = now()
+    WHERE id = ${bookingId}::uuid
+    RETURNING id
+  `;
+  return (rows as BookingRow[]).length > 0;
 }
 
 export async function setInternalWebsiteBookingNeverPush(bookingId: string, neverPush: boolean) {
