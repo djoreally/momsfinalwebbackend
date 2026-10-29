@@ -33,7 +33,7 @@ if (verifyOnly) {
 } else {
   for (const file of pending) {
     const migration = await readFile(resolve(sqlDir, file), "utf8");
-    const statements = migration.split(/;\\s*(?:\\n|$)/).map((statement) => statement.trim()).filter(Boolean);
+    const statements = migration.split(/;\s*(?:\n|$)/).map((statement) => statement.trim()).filter(Boolean);
     console.log(`Applying ${file} (${statements.length} statements)...`);
     await sql.transaction([
       ...statements.map((statement) => sql.query(statement)),
