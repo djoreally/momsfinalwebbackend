@@ -1,5 +1,5 @@
 import { getSql } from "../../../../packages/db/src/index.js";
-import { serviceWriterCatalogName } from "../domain/service-catalog-alignment.js";
+import { serviceWriterCatalogId, serviceWriterCatalogName } from "../domain/service-catalog-alignment.js";
 
 /**
  * Website Bookings -> Service Writer selective push (website-backend half).
@@ -35,6 +35,15 @@ export type InternalWebsiteBookingFilter = "unpushed" | "never_push" | "pushed";
 export type InternalWebsiteBookingJob = {
   position: number;
   serviceId: string;
+  /**
+   * The exact Service Writer catalog record this job's service is
+   * bound to (domain/service-catalog-alignment.ts) — Service Writer
+   * resolves the product by this id; `serviceName` rides alongside as
+   * display text and as the fallback when no binding exists (null
+   * here). Mirrors the bookyouroilchangeext template's binding
+   * contract (its item snapshots carry `serviceCatalogId`).
+   */
+  serviceCatalogId: string | null;
   serviceName: string | null;
   vehicle: {
     year: number | null;
@@ -103,6 +112,9 @@ function mapJob(job: BookingRow): InternalWebsiteBookingJob {
   return {
     position: Number(job.position ?? 0),
     serviceId: String(job.serviceId ?? ""),
+    serviceCatalogId: serviceWriterCatalogId(
+      (job.serviceSlug as string | null) ?? null,
+    ),
     // Service Writer is the master catalog (2026-10-30): the name SW
     // receives is its own catalog name for this service's slug, never
     // the website's stored display name.
