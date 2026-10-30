@@ -27,8 +27,8 @@ UPDATE moms_ops.services
   SET waste_fee_cents = 400
   WHERE slug IN (
     'full-synthetic-oil-change',
-    'mobil-1-full-synthetic-oil-change',
-    'european-vehicle-full-synthetic-oil-change'
+    'mobil-1-advanced',
+    'european-spec-oil-change'
   );
 
 ALTER TABLE moms_ops.booking_jobs
