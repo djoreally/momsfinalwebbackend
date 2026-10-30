@@ -2,9 +2,10 @@ import { quoteService, type PriceQuote } from "./pricing.js";
 import { applyOffer, getOffer, OfferError } from "./offers.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
+import { getCustomer } from "../repositories/customer-vehicle.js";
+import { BookingConflictError, BookingValidationError, requireCustomerEmailForBooking } from "./booking-validation.js";
 
-export class BookingConflictError extends Error {}
-export class BookingValidationError extends Error {}
+export { BookingConflictError, BookingValidationError } from "./booking-validation.js";
 
 export async function reserveBooking(input: {
   customerId: string;
@@ -19,6 +20,13 @@ export async function reserveBooking(input: {
   offerCode?: string | null;
 }) {
   if (!input.jobs.length) throw new BookingValidationError("booking_requires_job");
+
+  // Email gate first, before any pricing or slot work: no valid
+  // customer email, no booking (see requireCustomerEmailForBooking).
+  // A customer id that does not resolve has no email on file and is
+  // rejected the same way.
+  const customer = await getCustomer(input.customerId);
+  requireCustomerEmailForBooking(customer?.email);
 
   // Offer rules come from the registry (domain/offers.ts). An unknown
   // code is rejected before any pricing work — a promised price never
