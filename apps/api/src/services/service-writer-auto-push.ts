@@ -1,21 +1,34 @@
 /**
- * Prepaid auto-push trigger: website backend -> Service Writer.
+ * Auto-push trigger: website backend -> Service Writer.
  *
- * Ty's rule (2026-10-29): anybody who PREPAYS on the MOMS website is
- * pushed to Service Writer automatically, with the website quote locked.
- * Unpaid bookings never come through here — they stay in the manual
- * selective-push queue, unchanged.
+ * Ty's rules: anybody who PREPAYS on the MOMS website is pushed to
+ * Service Writer automatically, with the website quote locked
+ * (2026-10-29); and EVERY website booking auto-pushes — a booking
+ * finalized as pay-at-appointment is pushed at that moment too, so no
+ * booking waits on a human working a manual queue (2026-10-30).
  *
- * This module is called from exactly one place: the Stripe webhook
- * handler (routes/stripe-webhooks.ts) after `payment_intent.succeeded`
- * has marked the booking's payment paid. That webhook is the only
- * authoritative payment-completion path in this codebase:
- * `chooseBookingPayment` (domain/payments.ts) only CREATES the Stripe
- * PaymentIntent — no handler other than the webhook ever transitions a
- * payment to `paid` — so there is no second completion path to hook.
+ * The trigger itself is payment-agnostic: the gate below only looks at
+ * push state (already-pushed / never-push / cancelled / live claim).
+ * It is invoked through the wired runner
+ * (services/service-writer-auto-push-runner.ts) from exactly two
+ * places:
  *
- * Failure discipline: this trigger never throws and never fails the
- * webhook. Service Writer owns the push pipeline; this module only
+ * - the Stripe webhook handler (routes/stripe-webhooks.ts) after
+ *   `payment_intent.succeeded` has marked the booking's payment paid.
+ *   That webhook is the only authoritative payment-completion path in
+ *   this codebase: `chooseBookingPayment` (domain/payments.ts) only
+ *   CREATES the Stripe PaymentIntent — no handler other than the
+ *   webhook ever transitions a payment to `paid` — so there is no
+ *   second completion path to hook.
+ * - `chooseBookingPayment` (domain/payments.ts) at the moment a
+ *   booking is recorded as due_at_appointment — the step that
+ *   finalizes a pay-at-appointment booking.
+ *
+ * A booking pushed by the first trigger makes the second a no-op
+ * (already_pushed), and vice versa: one push ever, whoever fires first.
+ *
+ * Failure discipline: this trigger never throws and never fails its
+ * caller. Service Writer owns the push pipeline; this module only
  * claims the booking atomically, calls Service Writer's internal
  * auto-push endpoint with the shared secret, and records the outcome.
  * On any failure the booking is left unstamped, the claim is released,
@@ -161,7 +174,7 @@ export type AutoPushTriggerResult =
   | { outcome: "failed"; reason: string };
 
 /**
- * Run one prepaid auto-push attempt for a booking. Idempotent: a second
+ * Run one auto-push attempt for a booking. Idempotent: a second
  * invocation for an already-pushed (or in-flight) booking creates
  * nothing and reports the existing state.
  */
@@ -204,3 +217,10 @@ export async function triggerPrepaidAutoPush(
   await deps.recordFailure(bookingId, result.reason).catch(() => undefined);
   return { outcome: "failed", reason: result.reason };
 }
+
+/**
+ * The same trigger under its payment-agnostic name. Since 2026-10-30
+ * the trigger serves pay-at-appointment bookings as well as prepaid
+ * ones; `triggerPrepaidAutoPush` remains as the original name.
+ */
+export const triggerBookingAutoPush = triggerPrepaidAutoPush;

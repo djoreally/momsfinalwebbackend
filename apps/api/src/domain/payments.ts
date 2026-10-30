@@ -4,6 +4,7 @@ import { getAppointment } from "../repositories/appointments.js";
 import { getBooking } from "../repositories/bookings.js";
 import { getCustomer, setStripeCustomerId } from "../repositories/customer-vehicle.js";
 import { createPayment, attachPaymentIntent, getPaymentByAppointment, getPaymentByBooking, setPaymentMethodState } from "../repositories/payments.js";
+import { runBookingAutoPush } from "../services/service-writer-auto-push-runner.js";
 
 export async function prepareAppointmentPayment(appointmentId: string) {
   const appointment = await getAppointment(appointmentId);
@@ -88,6 +89,16 @@ export async function chooseBookingPayment(bookingId: string, method: "pay_now" 
     } else {
       payment = await setPaymentMethodState(payment.id, "due_at_appointment", null, booking.quotedTotalCents);
     }
+    // Ty's rule (2026-10-30): EVERY website booking auto-pushes to
+    // Service Writer — pay-at-appointment bookings are pushed at the
+    // moment they are finalized as due_at_appointment, mirroring the
+    // prepaid path's webhook trigger. Same runner, same claim, same
+    // one-push-ever guarantee (a later payment-completion webhook for
+    // this booking finds it already pushed and creates nothing). The
+    // runner never throws: a failed push leaves the booking in the
+    // manual queue with the reason recorded, and this response — the
+    // customer's payment choice — is unaffected either way.
+    await runBookingAutoPush(booking.id, "pay_at_appointment");
     return { method, paymentId: payment.id, totalCents: booking.quotedTotalCents, currency: "usd" as const };
   }
 

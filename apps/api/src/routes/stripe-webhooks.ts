@@ -2,17 +2,7 @@ import { Hono } from "hono";
 import { getStripe } from "../integrations/stripe.js";
 import { updatePaymentStatusByIntent } from "../repositories/payments.js";
 import { recordDisputeEvent, recordPaymentIntentEvent, recordRefundEvent } from "../domain/stripe-evidence.js";
-import {
-  claimInternalWebsiteBookingAutoPush,
-  getInternalWebsiteBooking,
-  recordInternalWebsiteBookingAutoPushFailure,
-  recordInternalWebsiteBookingAutoPushSuccess,
-} from "../repositories/internal-website-bookings.js";
-import {
-  callServiceWriterAutoPush,
-  getServiceWriterAutoPushConfig,
-  triggerPrepaidAutoPush,
-} from "../services/service-writer-auto-push.js";
+import { runBookingAutoPush } from "../services/service-writer-auto-push-runner.js";
 
 export const stripeWebhookRoutes = new Hono();
 
@@ -30,36 +20,13 @@ export const stripeWebhookRoutes = new Hono();
  *
  * The trigger must never fail the webhook: a failed auto-push leaves the
  * booking unstamped and visible in the manual queue with the reason
- * recorded on it, which is the designed fail-safe.
+ * recorded on it, which is the designed fail-safe. The wired runner
+ * (services/service-writer-auto-push-runner.ts) carries that discipline
+ * and is shared with the pay-at-appointment trigger, so both paths run
+ * the identical claim -> call -> record pipeline.
  */
 async function maybeAutoPushPrepaidBooking(bookingId: string) {
-  const config = getServiceWriterAutoPushConfig();
-  if (!config) {
-    console.info("prepaid_auto_push_not_configured", { bookingId });
-    return;
-  }
-  try {
-    const result = await triggerPrepaidAutoPush(bookingId, {
-      getBooking: async (id) => {
-        const booking = await getInternalWebsiteBooking(id);
-        return booking
-          ? {
-              status: booking.status,
-              pushedSwAppointmentId: booking.pushedSwAppointmentId,
-              neverPush: booking.neverPush,
-              autoPushClaimedAt: booking.autoPushClaimedAt,
-            }
-          : null;
-      },
-      claim: claimInternalWebsiteBookingAutoPush,
-      recordFailure: recordInternalWebsiteBookingAutoPushFailure,
-      recordSuccess: recordInternalWebsiteBookingAutoPushSuccess,
-      callServiceWriter: (id) => callServiceWriterAutoPush(config, id),
-    });
-    console.info("prepaid_auto_push_result", { bookingId, ...result });
-  } catch (error) {
-    console.error("prepaid_auto_push_failed", { bookingId, error });
-  }
+  await runBookingAutoPush(bookingId, "stripe_webhook_prepaid");
 }
 
 stripeWebhookRoutes.post("/", async (c) => {
