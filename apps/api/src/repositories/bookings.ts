@@ -17,6 +17,7 @@ export type CreateBookingInput = {
     serviceId: string;
     quotedPriceCents: number;
     subtotalCents: number;
+    discountCents: number;
     wasteFeeCents: number;
     processingFeeCents: number;
     taxCents: number;
@@ -42,15 +43,15 @@ export async function createBooking(input: CreateBookingInput) {
       ) RETURNING *
     ), new_jobs AS (
       INSERT INTO moms_ops.booking_jobs (
-        booking_id,vehicle_id,service_id,quoted_price_cents,subtotal_cents,waste_fee_cents,
+        booking_id,vehicle_id,service_id,quoted_price_cents,subtotal_cents,discount_cents,waste_fee_cents,
         processing_fee_cents,tax_cents,duration_minutes,position,status
       )
       SELECT b.id,j."vehicleId"::uuid,j."serviceId"::uuid,j."quotedPriceCents",j."subtotalCents",
-        j."wasteFeeCents",j."processingFeeCents",j."taxCents",j."durationMinutes",j."position",'confirmed'
+        j."discountCents",j."wasteFeeCents",j."processingFeeCents",j."taxCents",j."durationMinutes",j."position",'confirmed'
       FROM new_booking b
       CROSS JOIN LATERAL jsonb_to_recordset(${jobsJson}::jsonb)
         AS j("vehicleId" text,"serviceId" text,"quotedPriceCents" integer,"subtotalCents" integer,
-             "wasteFeeCents" integer,"processingFeeCents" integer,"taxCents" integer,
+             "discountCents" integer,"wasteFeeCents" integer,"processingFeeCents" integer,"taxCents" integer,
              "durationMinutes" integer,"position" integer)
       RETURNING *
     )
@@ -73,7 +74,7 @@ export async function getBooking(bookingId: string) {
   }).from(customers).where(eq(customers.id,booking.customerId)).limit(1);
   const jobs=await db.select({
     id:bookingJobs.id,status:bookingJobs.status,quotedPriceCents:bookingJobs.quotedPriceCents,
-    subtotalCents:bookingJobs.subtotalCents,wasteFeeCents:bookingJobs.wasteFeeCents,
+    subtotalCents:bookingJobs.subtotalCents,discountCents:bookingJobs.discountCents,wasteFeeCents:bookingJobs.wasteFeeCents,
     processingFeeCents:bookingJobs.processingFeeCents,taxCents:bookingJobs.taxCents,
     durationMinutes:bookingJobs.durationMinutes,position:bookingJobs.position,
     vehicle:{id:vehicles.id,year:vehicles.year,make:vehicles.make,model:vehicles.model,engine:vehicles.engine},

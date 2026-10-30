@@ -2,10 +2,46 @@ import { quoteService, type PriceQuote } from "./pricing.js";
 import { applyOffer, getOffer, OfferError } from "./offers.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
-import { getCustomer } from "../repositories/customer-vehicle.js";
+import { findVehicleForCustomer, getCustomer } from "../repositories/customer-vehicle.js";
+import { getService, getServiceBySlug } from "../repositories/services.js";
+import {
+  EUROPEAN_SPEC_SERVICE_SLUG,
+  europeanAdjustmentAdvisory,
+  resolveSwitchedServiceSlug,
+} from "./european-services.js";
 import { BookingConflictError, BookingValidationError, requireCustomerEmailForBooking } from "./booking-validation.js";
 
 export { BookingConflictError, BookingValidationError } from "./booking-validation.js";
+
+/**
+ * European auto-switch (owner ruling, 2026-10-30): a job booked on a
+ * regular oil-change service for a European vehicle is corrected to
+ * the European-spec service BEFORE pricing, so the stored job records
+ * the European service and the quote, the confirmation email, and the
+ * Service Writer push all agree. Fail-safe: a job whose vehicle or
+ * service cannot be resolved here — or any job, if the European
+ * service row is missing/inactive — is left exactly as booked;
+ * pricing surfaces real problems as quote_not_available, as before.
+ */
+async function resolveEffectiveJobs(
+  customerId: string,
+  jobs: Array<{ vehicleId: string; serviceId: string }>,
+): Promise<Array<{ vehicleId: string; serviceId: string }>> {
+  let europeanServiceId: string | null | undefined;
+  return Promise.all(jobs.map(async (job) => {
+    const [vehicle, service] = await Promise.all([
+      findVehicleForCustomer(customerId, job.vehicleId),
+      getService(job.serviceId),
+    ]);
+    if (!vehicle || !service) return job;
+    if (resolveSwitchedServiceSlug(service.slug, vehicle.make) === service.slug) return job;
+    if (europeanServiceId === undefined) {
+      const european = await getServiceBySlug(EUROPEAN_SPEC_SERVICE_SLUG);
+      europeanServiceId = european && european.active ? european.id : null;
+    }
+    return europeanServiceId ? { vehicleId: job.vehicleId, serviceId: europeanServiceId } : job;
+  }));
+}
 
 export async function reserveBooking(input: {
   customerId: string;
@@ -34,12 +70,18 @@ export async function reserveBooking(input: {
   const offer = input.offerCode ? getOffer(input.offerCode) : null;
   if (input.offerCode && !offer) throw new BookingValidationError("offer_not_recognized");
 
-  const unique = new Set(input.jobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
-  if (unique.size !== input.jobs.length) throw new BookingValidationError("duplicate_booking_job");
+  // The European switch runs on the effective jobs: duplicates are
+  // judged after correction (two different regular oil services for
+  // one European vehicle correct to the same European job, which is a
+  // duplicate), and pricing sees only the corrected services.
+  const effectiveJobs = await resolveEffectiveJobs(input.customerId, input.jobs);
+
+  const unique = new Set(effectiveJobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
+  if (unique.size !== effectiveJobs.length) throw new BookingValidationError("duplicate_booking_job");
 
   // Jobs are priced at standard rates first; the registry then confirms
   // what the offer code does to those quotes.
-  const quotes = await Promise.all(input.jobs.map((job) => quoteService({
+  const quotes = await Promise.all(effectiveJobs.map((job) => quoteService({
     customerId: input.customerId,
     vehicleId: job.vehicleId,
     serviceId: job.serviceId,
@@ -54,6 +96,10 @@ export async function reserveBooking(input: {
       // single-job-only offers reject multi-job bookings, min-jobs and
       // weekday (America/New_York, against scheduledStart) are checked,
       // and an offer attached to a non-eligible job fails the booking.
+      // The 2026-10-30 carve-outs ride inside applyOffer: grade-
+      // excluded jobs and European-spec jobs never fail the booking —
+      // excluded jobs price at list, European jobs get the $10
+      // adjustment (and an advisory below).
       resolved = applyOffer(standardQuotes, offer.code, {
         scheduledStart: input.scheduledStart,
         mode: "booking",
@@ -61,6 +107,22 @@ export async function reserveBooking(input: {
     } catch (error) {
       if (error instanceof OfferError) throw new BookingValidationError(error.code);
       throw error;
+    }
+  }
+
+  // Customer advisories for adjusted European jobs ("adjust them
+  // with $10 off and advise"): one plain line per adjusted job,
+  // worded by the single helper in european-services.ts. The same
+  // advisories are rebuilt in the confirmation email from the stored
+  // job discounts (services/booking-email.ts).
+  const advisories: string[] = [];
+  for (const quote of resolved) {
+    if ((quote.europeanAdjustmentCents ?? 0) > 0) {
+      const vehicle = await findVehicleForCustomer(input.customerId, quote.vehicleId);
+      const label = vehicle
+        ? `${vehicle.year} ${vehicle.make} ${vehicle.model}`
+        : "European vehicle";
+      advisories.push(europeanAdjustmentAdvisory(label));
     }
   }
   const durationMinutes = resolved.reduce((sum, quote) => sum + quote.durationMinutes, 0);
@@ -71,7 +133,7 @@ export async function reserveBooking(input: {
     throw new BookingConflictError("slot_unavailable");
   }
 
-  return createBooking({
+  const booking = await createBooking({
     customerId: input.customerId,
     scheduledStart: input.scheduledStart,
     scheduledEnd,
@@ -87,6 +149,7 @@ export async function reserveBooking(input: {
       serviceId: quote.serviceId,
       quotedPriceCents: quote.totalCents,
       subtotalCents: quote.serviceSubtotalCents,
+      discountCents: quote.discountCents,
       wasteFeeCents: quote.wasteFeeCents,
       processingFeeCents: quote.processingFeeCents,
       taxCents: quote.taxCents,
@@ -94,4 +157,5 @@ export async function reserveBooking(input: {
       position,
     })),
   });
+  return { ...booking, advisories };
 }

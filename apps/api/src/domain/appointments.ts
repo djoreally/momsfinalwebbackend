@@ -1,6 +1,32 @@
 import { quoteService } from "./pricing.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createAppointment } from "../repositories/appointments.js";
+import { findVehicleForCustomer } from "../repositories/customer-vehicle.js";
+import { getService, getServiceBySlug } from "../repositories/services.js";
+import { EUROPEAN_SPEC_SERVICE_SLUG, resolveSwitchedServiceSlug } from "./european-services.js";
+
+/**
+ * European auto-switch (owner ruling, 2026-10-30), same rule as the
+ * booking flow in domain/bookings.ts: a regular oil-change service
+ * for a European vehicle is corrected to the European-spec service
+ * before pricing, and the corrected service is what gets stored.
+ * Fail-safe: unresolvable vehicle/service, or a missing/inactive
+ * European service row, leaves the appointment exactly as booked.
+ */
+async function resolveEffectiveServiceId(input: {
+  customerId: string;
+  vehicleId: string;
+  serviceId: string;
+}): Promise<string> {
+  const [vehicle, service] = await Promise.all([
+    findVehicleForCustomer(input.customerId, input.vehicleId),
+    getService(input.serviceId),
+  ]);
+  if (!vehicle || !service) return input.serviceId;
+  if (resolveSwitchedServiceSlug(service.slug, vehicle.make) === service.slug) return input.serviceId;
+  const european = await getServiceBySlug(EUROPEAN_SPEC_SERVICE_SLUG);
+  return european && european.active ? european.id : input.serviceId;
+}
 
 export class AppointmentConflictError extends Error {}
 export class AppointmentValidationError extends Error {}
@@ -17,11 +43,13 @@ export async function reserveAppointment(input: {
   servicePostalCode: string;
   notes?: string | null;
 }) {
+  const effectiveServiceId = await resolveEffectiveServiceId(input);
+
   // Re-price at write time. Client-provided prices are never trusted.
   const quote = await quoteService({
     customerId: input.customerId,
     vehicleId: input.vehicleId,
-    serviceId: input.serviceId,
+    serviceId: effectiveServiceId,
   });
   if (!quote) throw new AppointmentValidationError("quote_not_available");
 
@@ -38,7 +66,7 @@ export async function reserveAppointment(input: {
     return await createAppointment({
     customerId: input.customerId,
     vehicleId: input.vehicleId,
-    serviceId: input.serviceId,
+    serviceId: effectiveServiceId,
     scheduledStart: input.scheduledStart,
     scheduledEnd,
     serviceAddressLine1: input.serviceAddressLine1,

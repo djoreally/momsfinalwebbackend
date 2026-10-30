@@ -1,4 +1,5 @@
 import { getBooking } from "../repositories/bookings.js";
+import { EUROPEAN_SPEC_SERVICE_SLUG, europeanAdjustmentAdvisory } from "../domain/european-services.js";
 import { getSql } from "../../../../packages/db/src/index.js";
 
 type Role = "customer" | "business";
@@ -10,10 +11,15 @@ const money = (c: number) => new Intl.NumberFormat("en-US",{style:"currency",cur
 function details(booking: NonNullable<Awaited<ReturnType<typeof getBooking>>>, role: Role) {
  const when = new Intl.DateTimeFormat("en-US",{dateStyle:"full",timeStyle:"short",timeZone:"America/New_York"}).format(new Date(booking.scheduledStart));
  const jobs = booking.jobs.map(j => `<li>${esc(j.service.name)} — ${esc(j.vehicle.year)} ${esc(j.vehicle.make)} ${esc(j.vehicle.model)} (${money(j.quotedPriceCents)})</li>`).join("");
+ // European adjustment advisories (owner, 2026-10-30: "adjust them with $10 off and advise"): a European-spec job
+ // carrying a stored discount got the $10 adjustment — within this system that is the only discount a European
+ // job can carry — so the customer is told, in the same words the booking confirmation response uses.
+ const advisories = booking.jobs.filter(j => j.service.slug === EUROPEAN_SPEC_SERVICE_SLUG && (j.discountCents ?? 0) > 0)
+   .map(j => `<p>${esc(europeanAdjustmentAdvisory(`${j.vehicle.year} ${j.vehicle.make} ${j.vehicle.model}`))}</p>`).join("");
  const address = [booking.serviceAddressLine1,booking.serviceAddressLine2,booking.serviceCity,booking.serviceState,booking.servicePostalCode].filter(Boolean).map(esc).join(", ");
  const subject = role === "customer" ? `MOMS appointment confirmed — ${when}` : `New MOMS booking — ${when}`;
  const intro = role === "customer" ? `Hi ${esc(booking.customer?.firstName)}, your appointment is confirmed.` : `Customer: ${esc(booking.customer?.firstName)} ${esc(booking.customer?.lastName)} (${esc(booking.customer?.email)}; ${esc(booking.customer?.phone)}).`;
- const html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#111"><h1>${role==="customer"?"Your MOMS appointment is confirmed":"New MOMS appointment"}</h1><p>${intro}</p><p><strong>Date:</strong> ${esc(when)}</p><ul>${jobs}</ul><p><strong>Address:</strong> ${address}</p><p><strong>Service subtotal before tax:</strong> ${money(booking.quotedTotalCents)}</p><p>Exact oil and filter specifications are verified before service.</p><p>MOMS Mobile Oil Change · Established 2013</p></div>`;
+ const html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#111"><h1>${role==="customer"?"Your MOMS appointment is confirmed":"New MOMS appointment"}</h1><p>${intro}</p><p><strong>Date:</strong> ${esc(when)}</p><ul>${jobs}</ul>${advisories}<p><strong>Address:</strong> ${address}</p><p><strong>Service subtotal before tax:</strong> ${money(booking.quotedTotalCents)}</p><p>Exact oil and filter specifications are verified before service.</p><p>MOMS Mobile Oil Change · Established 2013</p></div>`;
  return {subject,html};
 }
 async function enqueue(bookingId: string) {

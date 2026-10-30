@@ -131,6 +131,7 @@ export const bookingJobs = momsOps.table(
     serviceId: uuid("service_id").notNull().references(() => services.id, { onDelete: "restrict" }),
     quotedPriceCents: integer("quoted_price_cents").notNull(),
     subtotalCents: integer("subtotal_cents").default(0).notNull(),
+    discountCents: integer("discount_cents").default(0).notNull(),
     wasteFeeCents: integer("waste_fee_cents").default(0).notNull(),
     processingFeeCents: integer("processing_fee_cents").default(0).notNull(),
     taxCents: integer("tax_cents").default(0).notNull(),

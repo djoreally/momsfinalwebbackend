@@ -13,9 +13,36 @@
  * full-synthetic service, i.e. a job whose standard base price is
  * 11900 cents. An offer attached to a non-eligible job does not apply.
  *
+ * Two per-job carve-outs sit on top of the anchor rule (owner
+ * rulings, 2026-10-30), both marked on the quote by the pricing seam:
+ *   - Deal-excluded jobs (`offerExcluded`: the vehicle's specified
+ *     oil grade is 0W-16, 0W-8, or 0W-30 — see
+ *     domain/deal-exclusions.ts) are outside every deal. They are
+ *     returned unchanged and NEVER fail the booking.
+ *   - European-spec jobs (`europeanSpec`) are never blocked either:
+ *     instead of the offer's own discount they receive the $10
+ *     European adjustment (EUROPEAN_ADJUSTMENT_CENTS below), and the
+ *     customer is advised (see bookings.ts / booking-email.ts). A
+ *     European job takes precedence over a grade exclusion on the
+ *     same job.
+ * A job that is neither excluded nor European and still not
+ * anchor-eligible (e.g. Mobil 1 at its $129 base) keeps the original
+ * behavior: skipped in provisional mode, `offer_not_applicable` in
+ * booking mode.
+ *
  * This module is intentionally free of repository/DB imports so the pure
  * pricing logic can be unit-tested in isolation.
  */
+
+/**
+ * The European deal adjustment: $10 off a European-spec job when an
+ * offer is in play (see the header). Mirrored in
+ * domain/european-services.ts (the advisory wording lives there);
+ * the unit tests pin both copies and the applied behavior to 1000.
+ * This module stays import-free by design, hence the mirror — the
+ * same pattern price-components.ts documents for the pricing math.
+ */
+const EUROPEAN_ADJUSTMENT_CENTS = 1000;
 
 export const SOCIAL99_OFFER_CODE = "SOCIAL99" as const;
 export const SOCIAL89_OFFER_CODE = "SOCIAL89" as const;
@@ -362,6 +389,20 @@ export interface OfferQuoteLike {
   totalCents: number;
   offerCodeApplied: string | null;
   discountCents: number;
+  /**
+   * Deal exclusion (oil grade 0W-16 / 0W-8 / 0W-30): the job is
+   * outside every deal — returned unchanged, never fails the booking.
+   * Set by the pricing seam, which resolves the vehicle's grade.
+   */
+  offerExcluded?: boolean;
+  /**
+   * The job's service is the European-spec oil change: with an offer
+   * in play it receives the European adjustment instead of the offer's
+   * discount (and instead of any grade exclusion on the same job).
+   */
+  europeanSpec?: boolean;
+  /** European adjustment actually applied to this quote, in cents. */
+  europeanAdjustmentCents?: number;
 }
 
 export interface ApplyOfferOptions {
@@ -454,7 +495,14 @@ function repriceQuote<T extends OfferQuoteLike>(
  * second-job / perk offers — so the promise is attached to every
  * eligible job in the booking. Ineligible jobs (standard base price
  * other than 11900) are returned unchanged with `offerCodeApplied: null`
- * in provisional mode, and reject the whole call in booking mode.
+ * in provisional mode, and reject the whole call in booking mode —
+ * EXCEPT the two carve-outs from the header: deal-excluded jobs and
+ * European-spec jobs are outside the offer's own world. They never
+ * reject the call and never count toward the single-job scope;
+ * excluded jobs come back unchanged, and European jobs come back with
+ * the $10 European adjustment applied (their `discountCents` and
+ * `europeanAdjustmentCents` both record it) — "don't block Euro
+ * booking, adjust them with $10 off and advise" (owner, 2026-10-30).
  */
 export function applyOffer<T extends OfferQuoteLike>(
   quotes: readonly T[],
@@ -466,8 +514,15 @@ export function applyOffer<T extends OfferQuoteLike>(
 
   const strict = (opts.mode ?? "booking") === "booking";
 
+  // The offer's own world: jobs it can discount, scope, or reject.
+  // Excluded and European jobs are handled by their own rules below
+  // and are invisible to these checks.
+  const excluded = quotes.map((quote) => quote.offerExcluded === true);
+  const european = quotes.map((quote) => quote.europeanSpec === true);
+  const inOfferWorld = quotes.map((_, index) => !excluded[index] && !european[index]);
+
   if (strict) {
-    if (offer.scope === "single_job" && quotes.length !== 1) {
+    if (offer.scope === "single_job" && inOfferWorld.filter(Boolean).length > 1) {
       throw new OfferError("offer_single_job_only");
     }
     if (offer.minJobs !== undefined && quotes.length < offer.minJobs) {
@@ -481,8 +536,10 @@ export function applyOffer<T extends OfferQuoteLike>(
     }
   }
 
-  const eligible = quotes.map((quote) => quote.basePriceCents === OFFER_ANCHOR_BASE_PRICE_CENTS);
-  if (strict && eligible.some((isEligible) => !isEligible)) {
+  const eligible = quotes.map(
+    (quote, index) => inOfferWorld[index] && quote.basePriceCents === OFFER_ANCHOR_BASE_PRICE_CENTS,
+  );
+  if (strict && quotes.some((_, index) => inOfferWorld[index] && !eligible[index])) {
     throw new OfferError("offer_not_applicable");
   }
 
@@ -527,7 +584,25 @@ export function applyOffer<T extends OfferQuoteLike>(
 
   let totalDiscountCents = 0;
   let appliedToAnyJob = false;
+  let adjustedAnyEuropeanJob = false;
   const updatedQuotes = quotes.map((quote, index) => {
+    if (european[index]) {
+      // European adjustment: $10 off the job's effective base price
+      // (components recompute on the adjusted subtotal), recorded as
+      // the job's discount and flagged via europeanAdjustmentCents so
+      // the confirmation can advise the customer. The offer's fee
+      // waiver does NOT ride along — only the $10 comes off.
+      adjustedAnyEuropeanJob = true;
+      const effectiveBasePriceCents = Math.max(0, quote.basePriceCents - EUROPEAN_ADJUSTMENT_CENTS);
+      const updated = repriceQuote(
+        { ...quote, europeanAdjustmentCents: EUROPEAN_ADJUSTMENT_CENTS },
+        effectiveBasePriceCents,
+        false,
+        offer.code,
+      );
+      totalDiscountCents += updated.discountCents;
+      return updated;
+    }
     if (!eligible[index]) return quote;
     appliedToAnyJob = true;
     if (flatByIndex.has(index)) {
@@ -559,7 +634,12 @@ export function applyOffer<T extends OfferQuoteLike>(
   return {
     quotes: updatedQuotes,
     offer,
-    offerCodeApplied: appliedToAnyJob ? offer.code : null,
+    // A booking whose only deal effect is European adjustments still
+    // had the offer in play — the code is what triggered them — but
+    // the offer's own note does not describe that treatment, so it is
+    // only attached when the offer itself touched a job (the European
+    // advisory carries the wording for adjusted jobs).
+    offerCodeApplied: appliedToAnyJob || adjustedAnyEuropeanJob ? offer.code : null,
     totalDiscountCents,
     offerNote,
   };
