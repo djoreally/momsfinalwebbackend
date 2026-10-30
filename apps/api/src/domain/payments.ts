@@ -1,5 +1,4 @@
 import { getStripe } from "../integrations/stripe.js";
-import { calculateTax } from "./tax.js";
 import { getAppointment } from "../repositories/appointments.js";
 import { getBooking } from "../repositories/bookings.js";
 import { getCustomer, setStripeCustomerId } from "../repositories/customer-vehicle.js";
@@ -28,21 +27,12 @@ export async function prepareAppointmentPayment(appointmentId: string) {
     await setStripeCustomerId(customer.id, stripeCustomerId);
   }
 
-  const tax = await calculateTax({
-    amountCents: appointment.quotedPriceCents,
-    reference: appointment.id,
-    address: {
-      line1: appointment.serviceAddressLine1,
-      line2: appointment.serviceAddressLine2,
-      city: appointment.serviceCity,
-      state: appointment.serviceState,
-      postalCode: appointment.servicePostalCode,
-      country: "US",
-    },
-  });
-
+  // The quoted price already carries its own per-job tax component
+  // (domain/pricing.ts), so the charge is the quoted price exactly. Stripe
+  // Tax is deliberately NOT layered on top — doing so double-taxed the
+  // customer and made the prepaid charge exceed the locked quote.
   const intent = await stripe.paymentIntents.create({
-    amount: tax.totalCents,
+    amount: appointment.quotedPriceCents,
     currency: "usd",
     customer: stripeCustomerId,
     automatic_payment_methods: { enabled: true },
@@ -50,20 +40,20 @@ export async function prepareAppointmentPayment(appointmentId: string) {
       moms_customer_id: customer.id,
       moms_appointment_id: appointment.id,
       moms_payment_id: payment.id,
-      stripe_tax_calculation_id: tax.calculationId,
     },
-    hooks: { inputs: { tax: { calculation: tax.calculationId } } },
   }, { idempotencyKey: `moms-payment-${payment.id}` });
 
-  await attachPaymentIntent(payment.id, intent.id, tax.totalCents);
+  await attachPaymentIntent(payment.id, intent.id, appointment.quotedPriceCents);
 
   return {
     paymentId: payment.id,
     paymentIntentId: intent.id,
     clientSecret: intent.client_secret,
-    subtotalCents: tax.subtotalCents,
-    taxCents: tax.taxCents,
-    totalCents: tax.totalCents,
+    // The tax component is inside the quoted price (not stored separately
+    // for appointments), so no additional tax is broken out here.
+    subtotalCents: appointment.quotedPriceCents,
+    taxCents: 0,
+    totalCents: appointment.quotedPriceCents,
     currency: "usd" as const,
   };
 }
@@ -116,22 +106,21 @@ export async function chooseBookingPayment(bookingId: string, method: "pay_now" 
     await setStripeCustomerId(customer.id, stripeCustomerId);
   }
 
-  const tax = await calculateTax({
-    amountCents: booking.quotedTotalCents, reference: booking.id,
-    address: { line1: booking.serviceAddressLine1, line2: booking.serviceAddressLine2,
-      city: booking.serviceCity, state: booking.serviceState,
-      postalCode: booking.servicePostalCode, country: "US" },
-  });
+  // The quoted total already includes each job's tax component (persisted
+  // per job on booking_jobs), so the charge is the quoted total exactly.
+  // Stripe Tax is deliberately NOT layered on top — doing so double-taxed
+  // the customer and made the prepaid charge exceed the locked quote.
+  const taxCents = booking.jobs.reduce((sum, job) => sum + job.taxCents, 0);
+  const totalCents = booking.quotedTotalCents;
 
   const intent = await stripe.paymentIntents.create({
-    amount: tax.totalCents, currency: "usd", customer: stripeCustomerId,
+    amount: totalCents, currency: "usd", customer: stripeCustomerId,
     automatic_payment_methods: { enabled: true },
     metadata: { moms_customer_id: customer.id, moms_booking_id: booking.id,
-      moms_payment_id: payment.id, stripe_tax_calculation_id: tax.calculationId },
-    hooks: { inputs: { tax: { calculation: tax.calculationId } } },
-  }, { idempotencyKey: `moms-booking-payment-${payment.id}-${tax.totalCents}` });
+      moms_payment_id: payment.id },
+  }, { idempotencyKey: `moms-booking-payment-${payment.id}-${totalCents}` });
 
-  payment = await attachPaymentIntent(payment.id, intent.id, tax.totalCents);
+  payment = await attachPaymentIntent(payment.id, intent.id, totalCents);
   return { method, paymentId: payment.id, paymentIntentId: intent.id, clientSecret: intent.client_secret,
-    subtotalCents: tax.subtotalCents, taxCents: tax.taxCents, totalCents: tax.totalCents, currency: "usd" as const, reused: false };
+    subtotalCents: totalCents - taxCents, taxCents, totalCents, currency: "usd" as const, reused: false };
 }

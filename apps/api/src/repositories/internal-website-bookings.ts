@@ -25,6 +25,31 @@ import { getSql } from "../../../../packages/db/src/index.js";
 
 export type InternalWebsiteBookingFilter = "unpushed" | "never_push" | "pushed";
 
+/**
+ * One booking job = one vehicle + one service, priced per vehicle the way
+ * Service Writer prices natively: subtotal + waste oil fee + card
+ * processing fee + tax. Amounts are dollars with exact cents, following
+ * the quotedTotalUsd convention.
+ */
+export type InternalWebsiteBookingJob = {
+  position: number;
+  serviceId: string;
+  serviceName: string | null;
+  vehicle: {
+    year: number | null;
+    make: string | null;
+    model: string | null;
+    engine: string | null;
+    vin: string | null;
+  };
+  subtotalUsd: number;
+  wasteFeeUsd: number;
+  processingFeeUsd: number;
+  taxUsd: number;
+  totalUsd: number;
+  durationMinutes: number;
+};
+
 export type InternalWebsiteBooking = {
   id: string;
   customer: string;
@@ -39,6 +64,9 @@ export type InternalWebsiteBooking = {
   sourceChannel: string | null;
   status: string;
   vehicle: { year: number | null; make: string | null; model: string | null; engine: string | null };
+  /** Every job on the booking, ordered by position (the top-level
+   *  service/vehicle fields above stay the FIRST job's, for compatibility). */
+  jobs: InternalWebsiteBookingJob[];
   pushedSwAppointmentId: string | null;
   pushedAt: string | null;
   neverPush: boolean;
@@ -66,6 +94,44 @@ function derivePayment(row: BookingRow): InternalWebsiteBooking["payment"] {
   return "pending";
 }
 
+function centsToUsd(value: unknown): number {
+  return Number(value ?? 0) / 100;
+}
+
+function mapJob(job: BookingRow): InternalWebsiteBookingJob {
+  return {
+    position: Number(job.position ?? 0),
+    serviceId: String(job.serviceId ?? ""),
+    serviceName: (job.serviceName as string | null) ?? null,
+    vehicle: {
+      year: job.vehicleYear === null || job.vehicleYear === undefined ? null : Number(job.vehicleYear),
+      make: (job.vehicleMake as string | null) ?? null,
+      model: (job.vehicleModel as string | null) ?? null,
+      engine: (job.vehicleEngine as string | null) ?? null,
+      vin: (job.vehicleVin as string | null) ?? null,
+    },
+    subtotalUsd: centsToUsd(job.subtotalCents),
+    wasteFeeUsd: centsToUsd(job.wasteFeeCents),
+    processingFeeUsd: centsToUsd(job.processingFeeCents),
+    taxUsd: centsToUsd(job.taxCents),
+    totalUsd: centsToUsd(job.totalCents),
+    durationMinutes: Number(job.durationMinutes ?? 0),
+  };
+}
+
+function mapJobs(value: unknown): InternalWebsiteBookingJob[] {
+  let parsed: unknown = value;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return (parsed as BookingRow[]).map(mapJob);
+}
+
 function mapRow(row: BookingRow): InternalWebsiteBooking {
   const line2 = row.serviceAddressLine2 ? ` ${String(row.serviceAddressLine2)}` : "";
   return {
@@ -87,6 +153,7 @@ function mapRow(row: BookingRow): InternalWebsiteBooking {
       model: (row.vehicleModel as string | null) ?? null,
       engine: (row.vehicleEngine as string | null) ?? null,
     },
+    jobs: mapJobs(row.jobs),
     pushedSwAppointmentId: (row.pushedSwAppointmentId as string | null) ?? null,
     pushedAt: toIsoString(row.pushedAt),
     neverPush: Boolean(row.neverPush),
@@ -123,6 +190,26 @@ export async function listInternalWebsiteBookings(filter: InternalWebsiteBooking
       first_job.vehicle_make AS "vehicleMake",
       first_job.vehicle_model AS "vehicleModel",
       first_job.vehicle_engine AS "vehicleEngine",
+      COALESCE((SELECT json_agg(json_build_object(
+          'position', bj.position,
+          'serviceId', bj.service_id,
+          'serviceName', s.name,
+          'vehicleYear', v.year,
+          'vehicleMake', v.make,
+          'vehicleModel', v.model,
+          'vehicleEngine', v.engine,
+          'vehicleVin', v.vin,
+          'subtotalCents', bj.subtotal_cents,
+          'wasteFeeCents', bj.waste_fee_cents,
+          'processingFeeCents', bj.processing_fee_cents,
+          'taxCents', bj.tax_cents,
+          'totalCents', bj.quoted_price_cents,
+          'durationMinutes', bj.duration_minutes
+        ) ORDER BY bj.position ASC, bj.created_at ASC, bj.id ASC)
+        FROM moms_ops.booking_jobs bj
+        LEFT JOIN moms_ops.services s ON s.id = bj.service_id
+        LEFT JOIN moms_ops.vehicles v ON v.id = bj.vehicle_id
+        WHERE bj.booking_id = b.id), '[]'::json) AS "jobs",
       p.id AS "paymentId",
       p.status AS "paymentStatus",
       p.paid_at AS "paymentPaidAt"
