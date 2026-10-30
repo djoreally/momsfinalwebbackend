@@ -1,4 +1,5 @@
 import { getSql } from "../../../../packages/db/src/index.js";
+import { serviceWriterCatalogName } from "../domain/service-catalog-alignment.js";
 
 /**
  * Website Bookings -> Service Writer selective push (website-backend half).
@@ -102,7 +103,13 @@ function mapJob(job: BookingRow): InternalWebsiteBookingJob {
   return {
     position: Number(job.position ?? 0),
     serviceId: String(job.serviceId ?? ""),
-    serviceName: (job.serviceName as string | null) ?? null,
+    // Service Writer is the master catalog (2026-10-30): the name SW
+    // receives is its own catalog name for this service's slug, never
+    // the website's stored display name.
+    serviceName: serviceWriterCatalogName(
+      (job.serviceSlug as string | null) ?? null,
+      (job.serviceName as string | null) ?? null,
+    ),
     vehicle: {
       year: job.vehicleYear === null || job.vehicleYear === undefined ? null : Number(job.vehicleYear),
       make: (job.vehicleMake as string | null) ?? null,
@@ -144,7 +151,10 @@ function mapRow(row: BookingRow): InternalWebsiteBooking {
     quotedTotalUsd: Number(row.quotedTotalCents ?? 0) / 100,
     scheduledStart: toIsoString(row.scheduledStart) ?? "",
     scheduledEnd: toIsoString(row.scheduledEnd) ?? "",
-    service: (row.serviceName as string | null) ?? null,
+    service: serviceWriterCatalogName(
+      (row.serviceSlug as string | null) ?? null,
+      (row.serviceName as string | null) ?? null,
+    ),
     sourceChannel: null,
     status: String(row.status ?? ""),
     vehicle: {
@@ -186,6 +196,7 @@ export async function listInternalWebsiteBookings(filter: InternalWebsiteBooking
       c.email AS "email",
       c.phone AS "phone",
       first_job.service_name AS "serviceName",
+      first_job.service_slug AS "serviceSlug",
       first_job.vehicle_year AS "vehicleYear",
       first_job.vehicle_make AS "vehicleMake",
       first_job.vehicle_model AS "vehicleModel",
@@ -193,6 +204,7 @@ export async function listInternalWebsiteBookings(filter: InternalWebsiteBooking
       COALESCE((SELECT json_agg(json_build_object(
           'position', bj.position,
           'serviceId', bj.service_id,
+          'serviceSlug', s.slug,
           'serviceName', s.name,
           'vehicleYear', v.year,
           'vehicleMake', v.make,
@@ -218,6 +230,7 @@ export async function listInternalWebsiteBookings(filter: InternalWebsiteBooking
     LEFT JOIN LATERAL (
       SELECT
         s.name AS service_name,
+        s.slug AS service_slug,
         v.year AS vehicle_year,
         v.make AS vehicle_make,
         v.model AS vehicle_model,

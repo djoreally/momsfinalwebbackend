@@ -2,10 +2,42 @@ import { quoteService, type PriceQuote } from "./pricing.js";
 import { applyOffer, getOffer, OfferError } from "./offers.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
-import { getCustomer } from "../repositories/customer-vehicle.js";
+import { findVehicleForCustomer, getCustomer } from "../repositories/customer-vehicle.js";
+import { getService, getServiceBySlug } from "../repositories/services.js";
+import { EUROPEAN_SPEC_SERVICE_SLUG, resolveSwitchedServiceSlug } from "./european-services.js";
 import { BookingConflictError, BookingValidationError, requireCustomerEmailForBooking } from "./booking-validation.js";
 
 export { BookingConflictError, BookingValidationError } from "./booking-validation.js";
+
+/**
+ * European auto-switch (owner ruling, 2026-10-30): a job booked on a
+ * regular oil-change service for a European vehicle is corrected to
+ * the European-spec service BEFORE pricing, so the stored job records
+ * the European service and the quote, the confirmation email, and the
+ * Service Writer push all agree. Fail-safe: a job whose vehicle or
+ * service cannot be resolved here — or any job, if the European
+ * service row is missing/inactive — is left exactly as booked;
+ * pricing surfaces real problems as quote_not_available, as before.
+ */
+async function resolveEffectiveJobs(
+  customerId: string,
+  jobs: Array<{ vehicleId: string; serviceId: string }>,
+): Promise<Array<{ vehicleId: string; serviceId: string }>> {
+  let europeanServiceId: string | null | undefined;
+  return Promise.all(jobs.map(async (job) => {
+    const [vehicle, service] = await Promise.all([
+      findVehicleForCustomer(customerId, job.vehicleId),
+      getService(job.serviceId),
+    ]);
+    if (!vehicle || !service) return job;
+    if (resolveSwitchedServiceSlug(service.slug, vehicle.make) === service.slug) return job;
+    if (europeanServiceId === undefined) {
+      const european = await getServiceBySlug(EUROPEAN_SPEC_SERVICE_SLUG);
+      europeanServiceId = european && european.active ? european.id : null;
+    }
+    return europeanServiceId ? { vehicleId: job.vehicleId, serviceId: europeanServiceId } : job;
+  }));
+}
 
 export async function reserveBooking(input: {
   customerId: string;
@@ -34,12 +66,18 @@ export async function reserveBooking(input: {
   const offer = input.offerCode ? getOffer(input.offerCode) : null;
   if (input.offerCode && !offer) throw new BookingValidationError("offer_not_recognized");
 
-  const unique = new Set(input.jobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
-  if (unique.size !== input.jobs.length) throw new BookingValidationError("duplicate_booking_job");
+  // The European switch runs on the effective jobs: duplicates are
+  // judged after correction (two different regular oil services for
+  // one European vehicle correct to the same European job, which is a
+  // duplicate), and pricing sees only the corrected services.
+  const effectiveJobs = await resolveEffectiveJobs(input.customerId, input.jobs);
+
+  const unique = new Set(effectiveJobs.map((job) => `${job.vehicleId}:${job.serviceId}`));
+  if (unique.size !== effectiveJobs.length) throw new BookingValidationError("duplicate_booking_job");
 
   // Jobs are priced at standard rates first; the registry then confirms
   // what the offer code does to those quotes.
-  const quotes = await Promise.all(input.jobs.map((job) => quoteService({
+  const quotes = await Promise.all(effectiveJobs.map((job) => quoteService({
     customerId: input.customerId,
     vehicleId: job.vehicleId,
     serviceId: job.serviceId,
