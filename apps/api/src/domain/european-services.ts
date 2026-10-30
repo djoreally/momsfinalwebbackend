@@ -83,6 +83,35 @@ export function isEuropeanMake(make: string | null | undefined): boolean {
 }
 
 /**
+ * European deal adjustment (owner refinement, 2026-10-30: "Don't
+ * block Euro booking — adjust them with $10 off and advise"): when a
+ * deal/offer is in play, a European-spec job is never blocked and
+ * never silently dropped from the deal — it is ADJUSTED by this
+ * amount instead of receiving the offer's own discount. Applied by
+ * applyOffer (domain/offers.ts — which mirrors this constant because
+ * it stays import-free by design; the tests pin both to 1000) as a
+ * reduction of the job's effective base price, so the per-job
+ * components (waste, processing, tax) recompute on the adjusted
+ * subtotal and the discount is visible in the stored booking as the
+ * job's discount_cents. Without an offer in play there is no
+ * adjustment: the switch itself happens at list price, exactly as
+ * before.
+ */
+export const EUROPEAN_ADJUSTMENT_CENTS = 1000;
+
+/**
+ * The customer advisory for an adjusted European job — the ONE place
+ * this wording lives, so the booking confirmation response and the
+ * confirmation email always say the same plain thing: the vehicle
+ * requires European-spec oil, the service was adjusted to the
+ * European Spec Oil Change, and $10 was taken off. `vehicleLabel` is
+ * the vehicle as the customer knows it ("2020 Jaguar F-PACE").
+ */
+export function europeanAdjustmentAdvisory(vehicleLabel: string): string {
+  return `Your ${vehicleLabel} requires European-spec oil, so its service was adjusted to European Spec Oil Change and $10.00 was taken off.`;
+}
+
+/**
  * The service slug a job should actually be booked under. A switchable
  * oil-change service for a European vehicle becomes the European-spec
  * service; everything else is returned unchanged.

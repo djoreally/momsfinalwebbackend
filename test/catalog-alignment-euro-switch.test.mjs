@@ -227,3 +227,276 @@ test("the internal push payload sends master names keyed by slug", () => {
   assert.ok(internalSource.includes("'serviceSlug', s.slug"), "jobs payload must carry the slug the alignment keys on");
   assert.ok(internalSource.includes('first_job.service_slug AS "serviceSlug"'));
 });
+
+// ---------------------------------------------------------------------
+// F. Exact-product binding: every mapped slug also resolves to the
+// exact Service Writer catalog record id, and the internal push
+// payload carries it per job as `serviceCatalogId` (the
+// bookyouroilchangeext template's binding contract).
+// ---------------------------------------------------------------------
+
+const {
+  SW_MASTER_SERVICE_IDS,
+  serviceWriterCatalogId,
+} = await import("../apps/api/src/domain/service-catalog-alignment.ts");
+
+const EXPECTED_SW_IDS = {
+  "full-synthetic-oil-change": "5c1c4f88-5ee9-40ab-87a5-e061f59c0e4c",
+  "mobil-1-advanced": "d0aa9821-cc62-4ce1-8383-29987464323f",
+  "european-spec-oil-change": "0f7ad876-eade-419d-82de-32627cfe158c",
+  "cabin-air-filter": "787864f9-4f2e-40dc-999b-c49563215306",
+  "engine-air-filter": "1f19daa3-8813-4bc2-91dc-0f0a04b9a240",
+  "wiper-blade": "8610bfd9-ae83-420f-a273-8ad035f28680",
+};
+
+test("each mapped slug resolves to its exact SW catalog record id", () => {
+  for (const [slug, id] of Object.entries(EXPECTED_SW_IDS)) {
+    assert.equal(serviceWriterCatalogId(slug), id, slug);
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  }
+  assert.deepEqual({ ...SW_MASTER_SERVICE_IDS }, EXPECTED_SW_IDS);
+});
+
+test("name map and id map cover exactly the same slugs", () => {
+  assert.deepEqual(Object.keys(SW_MASTER_SERVICE_IDS).sort(), Object.keys(SW_MASTER_SERVICE_NAMES).sort());
+});
+
+test("unmapped slugs carry no catalog id", () => {
+  assert.equal(serviceWriterCatalogId("payment-test-1-dollar"), null);
+  assert.equal(serviceWriterCatalogId("additional-oil"), null, "no website additional-oil slug exists to bind");
+  assert.equal(serviceWriterCatalogId(null), null);
+  assert.equal(serviceWriterCatalogId(undefined), null);
+});
+
+test("the internal push payload carries serviceCatalogId per job", () => {
+  assert.ok(internalSource.includes("serviceCatalogId"), "payload type must carry the field");
+  assert.ok(internalSource.includes("serviceWriterCatalogId("), "payload must resolve the id from the slug");
+});
+
+// ---------------------------------------------------------------------
+// G. Deal exclusions by oil grade + the European adjustment
+// (owner rulings, 2026-10-30). applyOffer is pure; the grade
+// derivation is pure; the DB-bound flagging in quoteService and the
+// advisory wiring are source contracts below.
+// ---------------------------------------------------------------------
+
+const { applyOffer, OfferError } = await import("../apps/api/src/domain/offers.ts");
+const {
+  DEAL_EXCLUDED_OIL_GRADES,
+  extractOilGrade,
+  isDealExcludedOilGrade,
+} = await import("../apps/api/src/domain/deal-exclusions.ts");
+const {
+  EUROPEAN_ADJUSTMENT_CENTS,
+  europeanAdjustmentAdvisory,
+} = await import("../apps/api/src/domain/european-services.ts");
+
+// A per-job quote with the real components (waste $4, tax 6%):
+// full synthetic standard total = 11900 + 400 + 369 + 714 = 13383.
+function makeJobQuote(overrides = {}) {
+  return {
+    serviceId: "svc",
+    vehicleId: "veh",
+    basePriceCents: 11900,
+    extraQuarts: 0,
+    extraQuartPriceCents: 1400,
+    extraQuartChargeCents: 0,
+    extraQuartWaived: false,
+    processingFeePercent: 3,
+    processingFeeWaived: false,
+    wasteFeeCents: 400,
+    taxRatePercent: 6,
+    preTaxTotalCents: 12669,
+    totalCents: 13383,
+    durationMinutes: 45,
+    offerCodeApplied: null,
+    discountCents: 0,
+    europeanAdjustmentCents: 0,
+    ...overrides,
+  };
+}
+const euroJobQuote = (overrides = {}) =>
+  makeJobQuote({ basePriceCents: 14900, preTaxTotalCents: 15729, totalCents: 16653, europeanSpec: true, ...overrides });
+
+test("grade extraction normalizes case, spacing, and hyphen variants", () => {
+  assert.deepEqual([...DEAL_EXCLUDED_OIL_GRADES], ["0W-16", "0W-8", "0W-30"]);
+  assert.equal(extractOilGrade("0W-16"), "0W-16");
+  assert.equal(extractOilGrade("0w16"), "0W-16");
+  assert.equal(extractOilGrade("SAE 0W-8"), "0W-8");
+  assert.equal(extractOilGrade("0W - 30"), "0W-30");
+  assert.equal(extractOilGrade("0W-20"), "0W-20");
+  assert.equal(extractOilGrade("Full Synthetic"), null);
+  assert.equal(extractOilGrade("verified"), null);
+  assert.equal(extractOilGrade(null), null);
+});
+
+test("0W-16, 0W-8, and 0W-30 are deal-excluded; other grades are not", () => {
+  for (const grade of ["0W-16", "0W-8", "0W-30", "0w-16", "SAE 0W-30"]) {
+    assert.equal(isDealExcludedOilGrade(grade), true, grade);
+  }
+  for (const grade of ["0W-20", "5W-30", "5W-20", null, undefined, ""]) {
+    assert.equal(isDealExcludedOilGrade(grade), false, String(grade));
+  }
+});
+
+test("Euro job + code books successfully with the $10 adjustment, never blocked", () => {
+  const { quotes, totalDiscountCents, offerCodeApplied } = applyOffer([euroJobQuote()], "SOCIAL89", { mode: "booking" });
+  // European price with $10 off the base: 13900 + 400 waste + 429
+  // processing (3% of 14300, NOT waived) + 834 tax (6% of 13900).
+  assert.equal(quotes[0].totalCents, 15563);
+  assert.equal(quotes[0].discountCents, 1000);
+  assert.equal(quotes[0].europeanAdjustmentCents, EUROPEAN_ADJUSTMENT_CENTS);
+  assert.equal(quotes[0].processingFeeCents, 429);
+  assert.equal(quotes[0].offerCodeApplied, "SOCIAL89");
+  assert.equal(totalDiscountCents, 1000);
+  assert.equal(offerCodeApplied, "SOCIAL89");
+});
+
+test("Euro job adjusts under a perk offer too, and in provisional mode", () => {
+  const perk = applyOffer([euroJobQuote()], "WIPERS119", { mode: "booking" });
+  assert.equal(perk.quotes[0].discountCents, 1000);
+  assert.equal(perk.quotes[0].totalCents, 15563);
+  const provisional = applyOffer([euroJobQuote()], "SOCIAL89", { mode: "provisional" });
+  assert.equal(provisional.quotes[0].totalCents, 15563);
+});
+
+test("a European job that is also grade-excluded is governed by the adjustment, not the exclusion", () => {
+  const { quotes } = applyOffer([euroJobQuote({ offerExcluded: true })], "SOCIAL89", { mode: "booking" });
+  assert.equal(quotes[0].discountCents, 1000);
+  assert.equal(quotes[0].europeanAdjustmentCents, 1000);
+});
+
+test("grade-excluded job + code books at full price with no discount and no error", () => {
+  const { quotes, totalDiscountCents, offerCodeApplied } = applyOffer(
+    [makeJobQuote({ offerExcluded: true })],
+    "SOCIAL89",
+    { mode: "booking" },
+  );
+  assert.equal(quotes[0].totalCents, 13383);
+  assert.equal(quotes[0].discountCents, 0);
+  assert.equal(quotes[0].offerCodeApplied, null);
+  assert.equal(totalDiscountCents, 0);
+  assert.equal(offerCodeApplied, null);
+});
+
+test("grade-excluded non-anchor job (Mobil 1) also books at list instead of failing", () => {
+  const { quotes } = applyOffer(
+    [makeJobQuote({ basePriceCents: 12900, offerExcluded: true })],
+    "SOCIAL89",
+    { mode: "booking" },
+  );
+  assert.equal(quotes[0].discountCents, 0);
+  assert.equal(quotes[0].basePriceCents, 12900);
+});
+
+test("regular eligible job + code is unchanged: SOCIAL89 flat price with the fee waived", () => {
+  const { quotes, totalDiscountCents } = applyOffer([makeJobQuote()], "SOCIAL89", { mode: "booking" });
+  // 8900 + 400 waste + 0 processing (waived) + 534 tax = 9834.
+  assert.equal(quotes[0].totalCents, 9834);
+  assert.equal(quotes[0].discountCents, 3000);
+  assert.equal(quotes[0].processingFeeCents, 0);
+  assert.equal(quotes[0].europeanAdjustmentCents, 0);
+  assert.equal(totalDiscountCents, 3000);
+});
+
+test("mixed booking: only the eligible job gets the deal, the Euro job gets its adjustment", () => {
+  const { quotes, totalDiscountCents } = applyOffer(
+    [makeJobQuote(), euroJobQuote()],
+    "SOCIAL89",
+    { mode: "booking" },
+  );
+  assert.equal(quotes[0].totalCents, 9834, "eligible job keeps the SOCIAL89 deal");
+  assert.equal(quotes[1].totalCents, 15563, "Euro job adjusted, not blocked by the single-job scope");
+  assert.equal(quotes[1].europeanAdjustmentCents, 1000);
+  assert.equal(totalDiscountCents, 4000);
+});
+
+test("two regular jobs still trip the single-job scope", () => {
+  assert.throws(
+    () => applyOffer([makeJobQuote(), makeJobQuote()], "SOCIAL89", { mode: "booking" }),
+    (error) => error instanceof OfferError && error.code === "offer_single_job_only",
+  );
+});
+
+test("mixed booking: a grade-excluded job is skipped by an each-job deal", () => {
+  const tuesday = "2026-11-03T15:00:00Z"; // Tuesday in America/New_York
+  const { quotes } = applyOffer(
+    [makeJobQuote({ offerExcluded: true }), makeJobQuote()],
+    "TUESDAY15",
+    { mode: "booking", scheduledStart: tuesday },
+  );
+  assert.equal(quotes[0].discountCents, 0);
+  assert.equal(quotes[0].totalCents, 13383);
+  assert.equal(quotes[1].discountCents, 1500, "$15 off the eligible job only");
+});
+
+test("non-excluded non-European ineligible job still fails in booking mode", () => {
+  assert.throws(
+    () => applyOffer([makeJobQuote({ basePriceCents: 12900 })], "SOCIAL89", { mode: "booking" }),
+    (error) => error instanceof OfferError && error.code === "offer_not_applicable",
+  );
+});
+
+test("the European advisory wording is plain and carries all three facts", () => {
+  assert.equal(EUROPEAN_ADJUSTMENT_CENTS, 1000);
+  assert.equal(
+    europeanAdjustmentAdvisory("2020 Jaguar F-PACE"),
+    "Your 2020 Jaguar F-PACE requires European-spec oil, so its service was adjusted to European Spec Oil Change and $10.00 was taken off.",
+  );
+});
+
+// ---------------------------------------------------------------------
+// H. Wiring contracts for the exclusion flagging, the stored
+// discount, and the advisories (DB-bound flows, source-level).
+// ---------------------------------------------------------------------
+
+const pricingSource = readFileSync(
+  new URL("../apps/api/src/domain/pricing.ts", import.meta.url),
+  "utf8",
+);
+const schemaSource = readFileSync(
+  new URL("../packages/db/src/schema.ts", import.meta.url),
+  "utf8",
+);
+const migration006 = readFileSync(
+  new URL("../packages/db/sql/006_booking_job_discounts.sql", import.meta.url),
+  "utf8",
+);
+const emailSource = readFileSync(
+  new URL("../apps/api/src/services/booking-email.ts", import.meta.url),
+  "utf8",
+);
+const releaseDataChanges = readFileSync(
+  new URL("../release-data-changes.sql", import.meta.url),
+  "utf8",
+);
+
+test("quoteService resolves the grade from the spec dataset and flags the quote", () => {
+  assert.ok(pricingSource.includes("resolveVehicleSpec("), "grade comes from the spec lookup behind oil capacity");
+  assert.ok(pricingSource.includes("isDealExcludedOilGrade("));
+  assert.ok(pricingSource.includes("service.slug === EUROPEAN_SPEC_SERVICE_SLUG"));
+  assert.ok(pricingSource.includes("offerExcluded:"));
+  assert.ok(pricingSource.includes("europeanSpec:"));
+});
+
+test("the per-job discount is stored and the confirmation carries advisories", () => {
+  assert.ok(schemaSource.includes('discountCents: integer("discount_cents")'));
+  assert.ok(migration006.includes("ADD COLUMN IF NOT EXISTS discount_cents"));
+  assert.ok(bookingsSource.includes("discountCents: quote.discountCents"), "createBooking persists the discount");
+  assert.ok(bookingsSource.includes("europeanAdjustmentAdvisory("), "confirmation response advises");
+  assert.ok(bookingsSource.includes("advisories"), "advisories ride the booking response");
+  assert.ok(emailSource.includes("europeanAdjustmentAdvisory("), "confirmation email advises");
+  assert.ok(emailSource.includes("EUROPEAN_SPEC_SERVICE_SLUG"));
+  assert.ok(emailSource.includes("discountCents"), "email reads the stored discount");
+});
+
+test("release data changes are prepared in one file, both databases sectioned", () => {
+  assert.ok(releaseDataChanges.includes("NOT APPLIED"));
+  assert.ok(releaseDataChanges.includes("moms_ops.services"));
+  assert.ok(releaseDataChanges.includes("public.service_catalog"));
+  assert.ok(releaseDataChanges.includes("base_price_cents = 3900"), "wiper + engine filter prices");
+  assert.ok(releaseDataChanges.includes("Mobil 1 Full Synthetic"), "name alignment included");
+  for (const id of Object.values(EXPECTED_SW_IDS).slice(3)) {
+    assert.ok(releaseDataChanges.includes(id), `SW section addresses ${id}`);
+  }
+});

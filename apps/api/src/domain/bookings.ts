@@ -4,7 +4,11 @@ import { hasAppointmentConflict } from "../repositories/availability.js";
 import { createBooking } from "../repositories/bookings.js";
 import { findVehicleForCustomer, getCustomer } from "../repositories/customer-vehicle.js";
 import { getService, getServiceBySlug } from "../repositories/services.js";
-import { EUROPEAN_SPEC_SERVICE_SLUG, resolveSwitchedServiceSlug } from "./european-services.js";
+import {
+  EUROPEAN_SPEC_SERVICE_SLUG,
+  europeanAdjustmentAdvisory,
+  resolveSwitchedServiceSlug,
+} from "./european-services.js";
 import { BookingConflictError, BookingValidationError, requireCustomerEmailForBooking } from "./booking-validation.js";
 
 export { BookingConflictError, BookingValidationError } from "./booking-validation.js";
@@ -92,6 +96,10 @@ export async function reserveBooking(input: {
       // single-job-only offers reject multi-job bookings, min-jobs and
       // weekday (America/New_York, against scheduledStart) are checked,
       // and an offer attached to a non-eligible job fails the booking.
+      // The 2026-10-30 carve-outs ride inside applyOffer: grade-
+      // excluded jobs and European-spec jobs never fail the booking —
+      // excluded jobs price at list, European jobs get the $10
+      // adjustment (and an advisory below).
       resolved = applyOffer(standardQuotes, offer.code, {
         scheduledStart: input.scheduledStart,
         mode: "booking",
@@ -99,6 +107,22 @@ export async function reserveBooking(input: {
     } catch (error) {
       if (error instanceof OfferError) throw new BookingValidationError(error.code);
       throw error;
+    }
+  }
+
+  // Customer advisories for adjusted European jobs ("adjust them
+  // with $10 off and advise"): one plain line per adjusted job,
+  // worded by the single helper in european-services.ts. The same
+  // advisories are rebuilt in the confirmation email from the stored
+  // job discounts (services/booking-email.ts).
+  const advisories: string[] = [];
+  for (const quote of resolved) {
+    if ((quote.europeanAdjustmentCents ?? 0) > 0) {
+      const vehicle = await findVehicleForCustomer(input.customerId, quote.vehicleId);
+      const label = vehicle
+        ? `${vehicle.year} ${vehicle.make} ${vehicle.model}`
+        : "European vehicle";
+      advisories.push(europeanAdjustmentAdvisory(label));
     }
   }
   const durationMinutes = resolved.reduce((sum, quote) => sum + quote.durationMinutes, 0);
@@ -109,7 +133,7 @@ export async function reserveBooking(input: {
     throw new BookingConflictError("slot_unavailable");
   }
 
-  return createBooking({
+  const booking = await createBooking({
     customerId: input.customerId,
     scheduledStart: input.scheduledStart,
     scheduledEnd,
@@ -125,6 +149,7 @@ export async function reserveBooking(input: {
       serviceId: quote.serviceId,
       quotedPriceCents: quote.totalCents,
       subtotalCents: quote.serviceSubtotalCents,
+      discountCents: quote.discountCents,
       wasteFeeCents: quote.wasteFeeCents,
       processingFeeCents: quote.processingFeeCents,
       taxCents: quote.taxCents,
@@ -132,4 +157,5 @@ export async function reserveBooking(input: {
       position,
     })),
   });
+  return { ...booking, advisories };
 }
