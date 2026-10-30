@@ -12,7 +12,17 @@ export type CreateBookingInput = {
   servicePostalCode: string;
   quotedTotalCents: number;
   notes?: string | null;
-  jobs: Array<{ vehicleId: string; serviceId: string; quotedPriceCents: number; durationMinutes: number; position: number }>;
+  jobs: Array<{
+    vehicleId: string;
+    serviceId: string;
+    quotedPriceCents: number;
+    subtotalCents: number;
+    wasteFeeCents: number;
+    processingFeeCents: number;
+    taxCents: number;
+    durationMinutes: number;
+    position: number;
+  }>;
 };
 
 export async function createBooking(input: CreateBookingInput) {
@@ -32,12 +42,16 @@ export async function createBooking(input: CreateBookingInput) {
       ) RETURNING *
     ), new_jobs AS (
       INSERT INTO moms_ops.booking_jobs (
-        booking_id,vehicle_id,service_id,quoted_price_cents,duration_minutes,position,status
+        booking_id,vehicle_id,service_id,quoted_price_cents,subtotal_cents,waste_fee_cents,
+        processing_fee_cents,tax_cents,duration_minutes,position,status
       )
-      SELECT b.id,j."vehicleId"::uuid,j."serviceId"::uuid,j."quotedPriceCents",j."durationMinutes",j."position",'confirmed'
+      SELECT b.id,j."vehicleId"::uuid,j."serviceId"::uuid,j."quotedPriceCents",j."subtotalCents",
+        j."wasteFeeCents",j."processingFeeCents",j."taxCents",j."durationMinutes",j."position",'confirmed'
       FROM new_booking b
       CROSS JOIN LATERAL jsonb_to_recordset(${jobsJson}::jsonb)
-        AS j("vehicleId" text,"serviceId" text,"quotedPriceCents" integer,"durationMinutes" integer,"position" integer)
+        AS j("vehicleId" text,"serviceId" text,"quotedPriceCents" integer,"subtotalCents" integer,
+             "wasteFeeCents" integer,"processingFeeCents" integer,"taxCents" integer,
+             "durationMinutes" integer,"position" integer)
       RETURNING *
     )
     SELECT row_to_json(b) AS booking,
@@ -59,6 +73,8 @@ export async function getBooking(bookingId: string) {
   }).from(customers).where(eq(customers.id,booking.customerId)).limit(1);
   const jobs=await db.select({
     id:bookingJobs.id,status:bookingJobs.status,quotedPriceCents:bookingJobs.quotedPriceCents,
+    subtotalCents:bookingJobs.subtotalCents,wasteFeeCents:bookingJobs.wasteFeeCents,
+    processingFeeCents:bookingJobs.processingFeeCents,taxCents:bookingJobs.taxCents,
     durationMinutes:bookingJobs.durationMinutes,position:bookingJobs.position,
     vehicle:{id:vehicles.id,year:vehicles.year,make:vehicles.make,model:vehicles.model,engine:vehicles.engine},
     service:{id:services.id,name:services.name,slug:services.slug},

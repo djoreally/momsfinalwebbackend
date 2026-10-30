@@ -348,9 +348,16 @@ export function weekdayInNewYork(date: Date): number {
 export interface OfferQuoteLike {
   basePriceCents: number;
   extraQuartChargeCents: number;
+  /** Effective service subtotal (base + extra quarts, after discounts). */
+  serviceSubtotalCents?: number;
+  /** Per-job waste oil fee; fixed per service, never discounted. */
+  wasteFeeCents?: number;
   processingFeePercent: number;
   processingFeeCents: number;
   processingFeeWaived: boolean;
+  /** Per-service tax rate in percent, applied to the subtotal. */
+  taxRatePercent?: number;
+  taxCents?: number;
   preTaxTotalCents: number;
   totalCents: number;
   offerCodeApplied: string | null;
@@ -381,14 +388,26 @@ export interface ApplyOfferResult<T extends OfferQuoteLike> {
   offerNote: string | null;
 }
 
+
+
 function centsForPercent(amountCents: number, percent: number) {
   return Math.round(amountCents * (percent / 100));
 }
 
 /**
- * Rebuilds a quote around an effective base price, recalculating the
- * processing fee on the discounted subtotal — the same math the original
- * Facebook offers used (flat price replaces base before fee calculation).
+ * Rebuilds a quote around an effective base price, recalculating every
+ * price component on the discounted subtotal — the same per-job build
+ * the standard quote uses (calculatePriceComponents in
+ * price-components.ts; the formula is mirrored here because this module
+ * must stay import-free for direct unit testing — keep the two in sync):
+ * the waste oil fee is per vehicle/service and never discounted, the
+ * processing fee is recalculated on (subtotal + waste fee) unless
+ * waived, and tax is recalculated on the discounted subtotal. A flat
+ * price replaces the base price before the components are calculated,
+ * exactly as the original Facebook offers worked.
+ *
+ * Component fields are optional on OfferQuoteLike so quotes built
+ * without them (older callers/fixtures) reprice with 0 waste / 0 tax.
  */
 function repriceQuote<T extends OfferQuoteLike>(
   quote: T,
@@ -398,17 +417,25 @@ function repriceQuote<T extends OfferQuoteLike>(
 ): T {
   const discountCents = quote.basePriceCents - effectiveBasePriceCents;
   const serviceSubtotalCents = effectiveBasePriceCents + quote.extraQuartChargeCents;
+  const wasteFeeCents = quote.wasteFeeCents ?? 0;
+  const taxRatePercent = quote.taxRatePercent ?? 0;
   const processingFeeWaived = feeWaivedByOffer || quote.processingFeeWaived;
   const processingFeeCents = processingFeeWaived
     ? 0
-    : centsForPercent(serviceSubtotalCents, quote.processingFeePercent);
-  const totalCents = serviceSubtotalCents + processingFeeCents;
+    : centsForPercent(serviceSubtotalCents + wasteFeeCents, quote.processingFeePercent);
+  const taxCents = centsForPercent(serviceSubtotalCents, taxRatePercent);
+  const preTaxTotalCents = serviceSubtotalCents + wasteFeeCents + processingFeeCents;
+  const totalCents = preTaxTotalCents + taxCents;
   return {
     ...quote,
     basePriceCents: effectiveBasePriceCents,
+    serviceSubtotalCents,
+    wasteFeeCents,
     processingFeeCents,
     processingFeeWaived,
-    preTaxTotalCents: totalCents,
+    taxRatePercent,
+    taxCents,
+    preTaxTotalCents,
     totalCents,
     offerCodeApplied,
     discountCents,
@@ -418,8 +445,9 @@ function repriceQuote<T extends OfferQuoteLike>(
 /**
  * Applies a registered offer to standard-priced quotes.
  *
- * Discounts always reduce the job's effective base price (fee is then
- * recalculated on the discounted subtotal), so per-job `discountCents`
+ * Discounts always reduce the job's effective base price (the waste fee,
+ * processing fee and tax are then recalculated around the discounted
+ * subtotal), so per-job `discountCents`
  * stays consistent with the PriceQuote shape: standard base minus
  * effective base. Eligible jobs report `offerCodeApplied` set to the
  * code — including jobs that receive no discount under first-job /

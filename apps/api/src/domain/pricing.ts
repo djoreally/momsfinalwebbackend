@@ -1,6 +1,9 @@
 import { getService } from "../repositories/services.js";
 import { findVehicleForCustomer } from "../repositories/customer-vehicle.js";
 import { applyOffer } from "./offers.js";
+import { calculatePriceComponents } from "./price-components.js";
+
+export { calculatePriceComponents } from "./price-components.js";
 
 export {
   SOCIAL99_OFFER_CODE,
@@ -22,9 +25,13 @@ export type PriceQuote = {
   extraQuartPriceCents: number | null;
   extraQuartChargeCents: number;
   extraQuartWaived: boolean;
+  serviceSubtotalCents: number;
+  wasteFeeCents: number;
   processingFeePercent: number;
   processingFeeCents: number;
   processingFeeWaived: boolean;
+  taxRatePercent: number;
+  taxCents: number;
   preTaxTotalCents: number;
   totalCents: number;
   durationMinutes: number;
@@ -33,10 +40,6 @@ export type PriceQuote = {
   discountCents: number;
   offerNote: string | null;
 };
-
-function centsForPercent(amountCents: number, percent: number) {
-  return Math.round(amountCents * (percent / 100));
-}
 
 /**
  * Applies an offer code to a single standard-priced quote through the
@@ -84,10 +87,16 @@ export async function quoteService(input: {
     input.waiveProcessingFee && service.processingFeeWaivable,
   );
   const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
-  const processingFeeCents = processingFeeWaived
-    ? 0
-    : centsForPercent(serviceSubtotalCents, processingFeePercent);
-  const preTaxTotalCents = serviceSubtotalCents + processingFeeCents;
+  const wasteFeeCents = service.wasteFeeCents;
+  const taxRatePercent = Number(service.taxRatePercent);
+  const { processingFeeCents, taxCents, preTaxTotalCents, totalCents } =
+    calculatePriceComponents({
+      serviceSubtotalCents,
+      wasteFeeCents,
+      processingFeePercent,
+      processingFeeWaived,
+      taxRatePercent,
+    });
 
   const standardQuote: PriceQuote = {
     serviceId: service.id,
@@ -100,11 +109,15 @@ export async function quoteService(input: {
     extraQuartPriceCents: service.extraQuartPriceCents,
     extraQuartChargeCents,
     extraQuartWaived,
+    serviceSubtotalCents,
+    wasteFeeCents,
     processingFeePercent,
     processingFeeCents,
     processingFeeWaived,
+    taxRatePercent,
+    taxCents,
     preTaxTotalCents,
-    totalCents: preTaxTotalCents,
+    totalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2",
     offerCodeApplied: null,
@@ -132,8 +145,16 @@ export async function previewServicePrice(input: {
     service.extraQuartPriceCents === null ? 0 : Math.round(extraQuarts * service.extraQuartPriceCents);
   const processingFeePercent = Number(service.processingFeePercent);
   const serviceSubtotalCents = service.basePriceCents + extraQuartChargeCents;
-  const processingFeeCents = centsForPercent(serviceSubtotalCents, processingFeePercent);
-  const totalCents = serviceSubtotalCents + processingFeeCents;
+  const wasteFeeCents = service.wasteFeeCents;
+  const taxRatePercent = Number(service.taxRatePercent);
+  const { processingFeeCents, taxCents, preTaxTotalCents, totalCents } =
+    calculatePriceComponents({
+      serviceSubtotalCents,
+      wasteFeeCents,
+      processingFeePercent,
+      processingFeeWaived: false,
+      taxRatePercent,
+    });
 
   const standardQuote = {
     serviceId: service.id,
@@ -144,10 +165,14 @@ export async function previewServicePrice(input: {
     extraQuarts,
     extraQuartPriceCents: service.extraQuartPriceCents,
     extraQuartChargeCents,
+    serviceSubtotalCents,
+    wasteFeeCents,
     processingFeePercent,
     processingFeeCents,
     processingFeeWaived: false,
-    preTaxTotalCents: totalCents,
+    taxRatePercent,
+    taxCents,
+    preTaxTotalCents,
     totalCents,
     durationMinutes: service.defaultDurationMinutes,
     pricingVersion: "moms-v2" as const,
