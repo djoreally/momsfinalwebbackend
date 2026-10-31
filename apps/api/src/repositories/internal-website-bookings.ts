@@ -68,6 +68,10 @@ export type InternalWebsiteBooking = {
   address: string;
   payment: "paid" | "pending" | "due_at_appointment";
   quotedTotalUsd: number;
+  /** The customer's own notes from the website booking form
+   *  (bookings.notes), carried verbatim — Service Writer stores them
+   *  as the appointment's notes and nothing else may land there. */
+  notes: string | null;
   scheduledStart: string;
   scheduledEnd: string;
   service: string | null;
@@ -161,6 +165,7 @@ function mapRow(row: BookingRow): InternalWebsiteBooking {
     address: `${String(row.serviceAddressLine1 ?? "")}${line2}, ${String(row.serviceCity ?? "")}, ${String(row.serviceState ?? "")} ${String(row.servicePostalCode ?? "")}`,
     payment: derivePayment(row),
     quotedTotalUsd: Number(row.quotedTotalCents ?? 0) / 100,
+    notes: (row.notes as string | null) ?? null,
     scheduledStart: toIsoString(row.scheduledStart) ?? "",
     scheduledEnd: toIsoString(row.scheduledEnd) ?? "",
     service: serviceWriterCatalogName(
@@ -198,6 +203,7 @@ export async function listInternalWebsiteBookings(filter: InternalWebsiteBooking
       b.service_state AS "serviceState",
       b.service_postal_code AS "servicePostalCode",
       b.quoted_total_cents AS "quotedTotalCents",
+      b.notes AS "notes",
       b.pushed_sw_appointment_id AS "pushedSwAppointmentId",
       b.pushed_at AS "pushedAt",
       b.never_push AS "neverPush",
