@@ -58,6 +58,7 @@ internalWebsiteBookingRoutes.get("/", async (c) => {
       address: booking.address,
       payment: booking.payment,
       quoted_total_usd: booking.quotedTotalUsd,
+      notes: booking.notes,
       scheduled_start: booking.scheduledStart,
       scheduled_end: booking.scheduledEnd,
       service: booking.service,
