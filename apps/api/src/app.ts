@@ -12,6 +12,7 @@ import { internalWebsiteBookingRoutes } from "./routes/internal-website-bookings
 import { mediaRoutes } from "./routes/media.js";
 import { newsletterRoutes } from "./routes/newsletter.js";
 import { operationsPaymentRoutes } from "./routes/operations-payments.js";
+import { operationsReportRoutes } from "./routes/operations-reports.js";
 import { operationsRoutes } from "./routes/operations.js";
 import { pricingRoutes } from "./routes/pricing.js";
 import { paymentRoutes } from "./routes/payments.js";
@@ -72,6 +73,7 @@ app.route("/v1/history", historyRoutes);
 app.route("/v1/media", mediaRoutes);
 app.route("/v1/newsletter", newsletterRoutes);
 app.route("/v1/operations/payments", operationsPaymentRoutes);
+app.route("/v1/operations/reports", operationsReportRoutes);
 app.route("/v1/operations", operationsRoutes);
 app.route("/v1/services", serviceRoutes);
 app.route("/v1/service-orders", serviceOrderRoutes);
