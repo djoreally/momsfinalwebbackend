@@ -11,6 +11,14 @@
     {
       "path": "/health/database",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/v1/bookings/notification-sweep",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/v1/bookings/retry-due-notifications",
+      "schedule": "*/15 * * * *"
     }
   ],
   "git": {
