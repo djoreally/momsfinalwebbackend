@@ -10,6 +10,7 @@ import {
   resolveSwitchedServiceSlug,
 } from "./european-services.js";
 import { BookingConflictError, BookingValidationError, requireCustomerEmailForBooking } from "./booking-validation.js";
+import { generateManageToken } from "./notifications.js";
 
 export { BookingConflictError, BookingValidationError } from "./booking-validation.js";
 
@@ -144,6 +145,10 @@ export async function reserveBooking(input: {
     servicePostalCode: input.servicePostalCode,
     quotedTotalCents,
     notes: input.notes,
+    // The customer's /appointment/<token> credential, minted here so
+    // every new booking carries one from birth (no backfill in v1:
+    // bookings created before this feature simply have no link).
+    manageToken: generateManageToken(),
     jobs: resolved.map((quote, position) => ({
       vehicleId: quote.vehicleId,
       serviceId: quote.serviceId,
