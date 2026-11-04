@@ -4,6 +4,7 @@ import { BookingConflictError, BookingValidationError, reserveBooking } from "..
 import { getOffer } from "../domain/offers.js";
 import { getBooking } from "../repositories/bookings.js";
 import { sendBookingConfirmation, retryDueBookingEmails } from "../services/booking-email.js";
+import { runNotificationSweep } from "../services/notifications.js";
 
 const createInput = z.object({
   customerId: z.string().uuid(),
@@ -60,6 +61,16 @@ bookingRoutes.get("/retry-due-notifications", async (c) => {
   if (!secret || c.req.header("authorization") !== `Bearer ${secret}`) return c.json({error:"unauthorized"},401);
   try { return c.json({processed:await retryDueBookingEmails()}); }
   catch(error) { console.error("booking_email_retry_failed",error);return c.json({error:"retry_failed"},503); }
+});
+
+// The booking-notifications reminder sweep (T-24h / T-1h, email +
+// push). Driven by an outside trigger every 15 minutes; same
+// scheduler guard as the email retry sweep above.
+bookingRoutes.get("/notification-sweep", async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || c.req.header("authorization") !== `Bearer ${secret}`) return c.json({error:"unauthorized"},401);
+  try { return c.json({sweep:await runNotificationSweep()}); }
+  catch(error) { console.error("booking_notification_sweep_failed",error);return c.json({error:"sweep_failed"},503); }
 });
 
 bookingRoutes.get("/:bookingId", async (c) => {

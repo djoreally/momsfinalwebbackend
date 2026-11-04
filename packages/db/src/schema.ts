@@ -112,6 +112,8 @@ export const bookings = momsOps.table(
     autoPushClaimedAt: timestamp("auto_push_claimed_at", { withTimezone: true }),
     autoPushLastAttemptAt: timestamp("auto_push_last_attempt_at", { withTimezone: true }),
     autoPushLastError: text("auto_push_last_error"),
+    manageToken: text("manage_token"),
+    swManagementToken: text("sw_management_token"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -119,6 +121,7 @@ export const bookings = momsOps.table(
     index("bookings_customer_idx").on(table.customerId),
     index("bookings_schedule_idx").on(table.scheduledStart),
     index("bookings_status_idx").on(table.status),
+    uniqueIndex("bookings_manage_token_unique").on(table.manageToken),
   ],
 );
 
