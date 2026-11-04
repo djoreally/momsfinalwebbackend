@@ -1,17 +1,13 @@
-import { Temporal } from "@js-temporal/polyfill";
 import { getService } from "../repositories/services.js";
 import { hasAppointmentConflict } from "../repositories/availability.js";
+import { TIME_ZONE, candidateSlotsForDate } from "./business-hours.js";
 
-const SLOT_MINUTES = 30;
-const OPEN_HOUR = 8;
-const CLOSE_HOUR = 17;
-const TIME_ZONE = "America/New_York";
-
-function atLocalHour(date: string, hour: number) {
-  return Temporal.ZonedDateTime.from(
-    `${date}T${String(hour).padStart(2, "0")}:00:00[${TIME_ZONE}]`,
-  );
-}
+export {
+  BUSINESS_HOURS,
+  businessWindowForDate,
+  candidateSlotsForDate,
+} from "./business-hours.js";
+export type { BusinessDayWindow } from "./business-hours.js";
 
 export async function getAvailability(input: {
   serviceId: string;
@@ -20,23 +16,17 @@ export async function getAvailability(input: {
   const service = await getService(input.serviceId);
   if (!service || !service.active) return null;
 
-  const open = atLocalHour(input.date, OPEN_HOUR);
-  const close = atLocalHour(input.date, CLOSE_HOUR);
-  const slots = [];
+  const slots: { start: string; end: string }[] = [];
 
-  for (
-    let cursor = open;
-    Temporal.ZonedDateTime.compare(
-      cursor.add({ minutes: service.defaultDurationMinutes }),
-      close,
-    ) <= 0;
-    cursor = cursor.add({ minutes: SLOT_MINUTES })
-  ) {
-    const end = cursor.add({ minutes: service.defaultDurationMinutes });
-    const startDate = new Date(cursor.epochMilliseconds);
-    const endDate = new Date(end.epochMilliseconds);
-    if (!(await hasAppointmentConflict(startDate, endDate))) {
-      slots.push({ start: startDate.toISOString(), end: endDate.toISOString() });
+  for (const candidate of candidateSlotsForDate(
+    input.date,
+    service.defaultDurationMinutes,
+  )) {
+    if (!(await hasAppointmentConflict(candidate.start, candidate.end))) {
+      slots.push({
+        start: candidate.start.toISOString(),
+        end: candidate.end.toISOString(),
+      });
     }
   }
 
