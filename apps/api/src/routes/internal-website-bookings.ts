@@ -8,7 +8,6 @@ import {
   recordInternalWebsiteBookingAutoPushFailure,
   setInternalWebsiteBookingNeverPush,
   stampInternalWebsiteBookingPush,
-  storeInternalWebsiteBookingSwManagementToken,
   type InternalWebsiteBookingFilter,
 } from "../repositories/internal-website-bookings.js";
 
@@ -88,13 +87,6 @@ internalWebsiteBookingRoutes.get("/", async (c) => {
 
 const pushStampInput = z.object({
   sw_appointment_id: z.string().uuid(),
-  // Optional: the Service Writer customer-portal management token for
-  // the appointment just created. Service Writer sends it once the
-  // token exists (it is minted by a database trigger, so early stamps
-  // may not carry one yet); when present it is stored server-side on
-  // the booking and never exposed to customers. Absent = unchanged
-  // behavior.
-  managementToken: z.string().trim().min(1).max(512).optional(),
 });
 
 internalWebsiteBookingRoutes.post("/:id/push-stamp", async (c) => {
@@ -110,11 +102,6 @@ internalWebsiteBookingRoutes.post("/:id/push-stamp", async (c) => {
 
   if (booking.pushedSwAppointmentId) {
     if (booking.pushedSwAppointmentId === parsed.data.sw_appointment_id) {
-      // A re-stamp of the same appointment may be carrying the
-      // management token minted after the original stamp; store it.
-      if (parsed.data.managementToken) {
-        await storeInternalWebsiteBookingSwManagementToken(bookingId, parsed.data.managementToken);
-      }
       return c.json({
         data: {
           id: booking.id,
@@ -129,18 +116,11 @@ internalWebsiteBookingRoutes.post("/:id/push-stamp", async (c) => {
     );
   }
 
-  const stamped = await stampInternalWebsiteBookingPush(
-    bookingId,
-    parsed.data.sw_appointment_id,
-    parsed.data.managementToken ?? null,
-  );
+  const stamped = await stampInternalWebsiteBookingPush(bookingId, parsed.data.sw_appointment_id);
   if (!stamped) {
     // Lost a race with a concurrent stamp: report the winning stamp.
     const current = await getInternalWebsiteBooking(bookingId);
     if (current?.pushedSwAppointmentId === parsed.data.sw_appointment_id) {
-      if (parsed.data.managementToken) {
-        await storeInternalWebsiteBookingSwManagementToken(bookingId, parsed.data.managementToken);
-      }
       return c.json({
         data: {
           id: current.id,

@@ -11,7 +11,6 @@ import { historyRoutes } from "./routes/history.js";
 import { internalWebsiteBookingRoutes } from "./routes/internal-website-bookings.js";
 import { mediaRoutes } from "./routes/media.js";
 import { newsletterRoutes } from "./routes/newsletter.js";
-import { notificationRoutes } from "./routes/notifications.js";
 import { operationsPaymentRoutes } from "./routes/operations-payments.js";
 import { operationsReportRoutes } from "./routes/operations-reports.js";
 import { operationsRoutes } from "./routes/operations.js";
@@ -33,7 +32,7 @@ app.use("/v1/*", cors({
     if (/^https:\/\/[^/]+\.vercel\.app$/.test(origin)) return origin;
     return "https://momsoilchange.com";
   },
-  allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowMethods: ["GET", "POST", "OPTIONS"],
   allowHeaders: ["Content-Type"],
   maxAge: 86400,
 }));
@@ -66,7 +65,6 @@ app.get("/health/database", async (c) => {
 
 app.route("/v1/appointments", appointmentRoutes);
 app.route("/v1/bookings", bookingRoutes);
-app.route("/v1", notificationRoutes);
 app.route("/v1/availability", availabilityRoutes);
 app.route("/v1/customers", customerRoutes);
 app.route("/v1/dashboard", dashboardRoutes);
