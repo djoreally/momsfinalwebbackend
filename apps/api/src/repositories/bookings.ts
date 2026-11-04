@@ -12,7 +12,6 @@ export type CreateBookingInput = {
   servicePostalCode: string;
   quotedTotalCents: number;
   notes?: string | null;
-  manageToken: string;
   jobs: Array<{
     vehicleId: string;
     serviceId: string;
@@ -35,12 +34,12 @@ export async function createBooking(input: CreateBookingInput) {
       INSERT INTO moms_ops.bookings (
         customer_id,status,scheduled_start,scheduled_end,service_address_line_1,
         service_address_line_2,service_city,service_state,service_postal_code,
-        quoted_total_cents,notes,manage_token
+        quoted_total_cents,notes
       ) VALUES (
         ${input.customerId}::uuid,'confirmed',${input.scheduledStart.toISOString()}::timestamptz,
         ${input.scheduledEnd.toISOString()}::timestamptz,${input.serviceAddressLine1},
         ${input.serviceAddressLine2 ?? null},${input.serviceCity},${input.serviceState},
-        ${input.servicePostalCode},${input.quotedTotalCents},${input.notes ?? null},${input.manageToken}
+        ${input.servicePostalCode},${input.quotedTotalCents},${input.notes ?? null}
       ) RETURNING *
     ), new_jobs AS (
       INSERT INTO moms_ops.booking_jobs (
@@ -63,20 +62,6 @@ export async function createBooking(input: CreateBookingInput) {
   const row = rows[0] as { booking: Record<string, unknown>; jobs: unknown[] } | undefined;
   if (!row) throw new Error("booking_insert_failed");
   return { ...row.booking, jobs: row.jobs };
-}
-
-/** Move a booking to a new start/end (customer reschedule write-back). */
-export async function updateBookingSchedule(bookingId: string, scheduledStart: Date, scheduledEnd: Date) {
-  const sql = getSql();
-  const rows = (await sql`
-    UPDATE moms_ops.bookings
-    SET scheduled_start = ${scheduledStart.toISOString()}::timestamptz,
-        scheduled_end = ${scheduledEnd.toISOString()}::timestamptz,
-        updated_at = now()
-    WHERE id = ${bookingId}::uuid
-    RETURNING id
-  `) as unknown as Array<{ id: string }>;
-  return rows.length > 0;
 }
 
 export async function getBooking(bookingId: string) {

@@ -19,12 +19,7 @@ function details(booking: NonNullable<Awaited<ReturnType<typeof getBooking>>>, r
  const address = [booking.serviceAddressLine1,booking.serviceAddressLine2,booking.serviceCity,booking.serviceState,booking.servicePostalCode].filter(Boolean).map(esc).join(", ");
  const subject = role === "customer" ? `MOMS appointment confirmed — ${when}` : `New MOMS booking — ${when}`;
  const intro = role === "customer" ? `Hi ${esc(booking.customer?.firstName)}, your appointment is confirmed.` : `Customer: ${esc(booking.customer?.firstName)} ${esc(booking.customer?.lastName)} (${esc(booking.customer?.email)}; ${esc(booking.customer?.phone)}).`;
- // The manage link is the customer's credential for their appointment
- // page, so it goes ONLY in the customer copy — never the business one.
- const manage = role === "customer" && booking.manageToken
-   ? `<p><a href="https://momsoilchange.com/appointment/${esc(booking.manageToken)}">Manage your appointment</a> — view your booking or move it to another time.</p>`
-   : "";
- const html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#111"><h1>${role==="customer"?"Your MOMS appointment is confirmed":"New MOMS appointment"}</h1><p>${intro}</p><p><strong>Date:</strong> ${esc(when)}</p><ul>${jobs}</ul>${advisories}<p><strong>Address:</strong> ${address}</p><p><strong>Service subtotal before tax:</strong> ${money(booking.quotedTotalCents)}</p>${manage}<p>Exact oil and filter specifications are verified before service.</p><p>MOMS Mobile Oil Change · Established 2013</p></div>`;
+ const html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#111"><h1>${role==="customer"?"Your MOMS appointment is confirmed":"New MOMS appointment"}</h1><p>${intro}</p><p><strong>Date:</strong> ${esc(when)}</p><ul>${jobs}</ul>${advisories}<p><strong>Address:</strong> ${address}</p><p><strong>Service subtotal before tax:</strong> ${money(booking.quotedTotalCents)}</p><p>Exact oil and filter specifications are verified before service.</p><p>MOMS Mobile Oil Change · Established 2013</p></div>`;
  return {subject,html};
 }
 async function enqueue(bookingId: string) {

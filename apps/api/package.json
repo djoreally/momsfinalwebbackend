@@ -11,12 +11,10 @@
     "hono": "^4.9.7",
     "zod": "^4.1.8",
     "@js-temporal/polyfill": "^0.5.1",
-    "stripe": "^18.5.0",
-    "web-push": "^3.6.7"
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
-    "@types/web-push": "^3.6.4",
     "typescript": "^5.9.2"
   }
 }
