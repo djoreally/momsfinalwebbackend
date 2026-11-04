@@ -64,8 +64,8 @@ bookingRoutes.get("/retry-due-notifications", async (c) => {
 });
 
 // The booking-notifications reminder sweep (T-24h / T-1h, email +
-// push). Driven by the every-15-minutes Vercel cron; same scheduler
-// guard as the email retry sweep above.
+// push). Driven by an outside trigger every 15 minutes; same
+// scheduler guard as the email retry sweep above.
 bookingRoutes.get("/notification-sweep", async (c) => {
   const secret = process.env.CRON_SECRET;
   if (!secret || c.req.header("authorization") !== `Bearer ${secret}`) return c.json({error:"unauthorized"},401);

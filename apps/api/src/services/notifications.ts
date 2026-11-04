@@ -1,4 +1,4 @@
-import webpush from "web-push";
+import { sendWebPush } from "./web-push.js";
 import { getBooking, updateBookingSchedule } from "../repositories/bookings.js";
 import {
   claimNotificationRow,
@@ -96,22 +96,19 @@ async function sendResendEmail(input: {
   return data.id;
 }
 
-let vapidConfigured = false;
 function ensureVapid(): boolean {
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) return false;
-  if (!vapidConfigured) {
-    webpush.setVapidDetails("mailto:support@momsoilchange.com", publicKey, privateKey);
-    vapidConfigured = true;
-  }
-  return true;
+  return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 }
 
 async function sendPush(subscription: PushSubscriptionRecord, payload: object): Promise<void> {
-  await webpush.sendNotification(
+  await sendWebPush(
     { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
     JSON.stringify(payload),
+    {
+      subject: "mailto:support@momsoilchange.com",
+      publicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+      privateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+    },
   );
 }
 
@@ -220,7 +217,8 @@ export type SweepResult = {
 };
 
 /**
- * The reminder sweep, driven by Vercel cron every 15 minutes. Inside
+ * The reminder sweep, driven by an outside trigger every 15 minutes
+ * (Ty's decision: no Vercel cron lock-in). Inside
  * quiet hours (D4) it sends nothing: due rows stay pending and the
  * first post-08:00 run delivers them. Moments whose appointment time
  * has passed are marked expired, never sent late.

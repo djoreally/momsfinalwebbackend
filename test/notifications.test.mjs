@@ -228,14 +228,19 @@ test("confirmation email carries the manage link for the customer role only", ()
   assert.match(email, /Manage your appointment/);
 });
 
-test("sweep route exists behind the scheduler guard and cron drives both sweeps", () => {
+test("sweep route exists behind the scheduler guard; sweeps run on an outside trigger, not Vercel crons", () => {
   const route = read("../apps/api/src/routes/bookings.ts");
   assert.match(route, /"\/notification-sweep"/);
   assert.match(route, /runNotificationSweep/);
+  // Ty's outside-trigger decision (PR #25): the sweeps are driven by
+  // an external scheduler hitting the CRON_SECRET-guarded routes.
+  // vercel.json must carry NO */15 sweep crons (Hobby also rejects
+  // them at deploy time); only the pre-existing daily health cron
+  // stays.
   const vercel = JSON.parse(read("../vercel.json"));
   const cronPaths = vercel.crons.map((c) => `${c.schedule} ${c.path}`);
-  assert.ok(cronPaths.includes("*/15 * * * * /v1/bookings/notification-sweep"));
-  assert.ok(cronPaths.includes("*/15 * * * * /v1/bookings/retry-due-notifications"));
+  assert.ok(!cronPaths.some((p) => p.includes("/v1/bookings/notification-sweep")), "sweep must not be a Vercel cron");
+  assert.ok(!cronPaths.some((p) => p.includes("/v1/bookings/retry-due-notifications")), "retry sweep must not be a Vercel cron");
   assert.ok(cronPaths.includes("0 12 * * * /health/database"));
 });
 
