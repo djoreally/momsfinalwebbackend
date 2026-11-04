@@ -307,12 +307,17 @@ export async function getInternalWebsiteBooking(bookingId: string) {
   };
 }
 
-export async function stampInternalWebsiteBookingPush(bookingId: string, swAppointmentId: string) {
+export async function stampInternalWebsiteBookingPush(
+  bookingId: string,
+  swAppointmentId: string,
+  managementToken?: string | null,
+) {
   const sql = getSql();
   const rows = await sql`
     UPDATE moms_ops.bookings
     SET pushed_sw_appointment_id = ${swAppointmentId},
         pushed_at = now(),
+        sw_management_token = COALESCE(${managementToken ?? null}, sw_management_token),
         updated_at = now()
     WHERE id = ${bookingId}::uuid
       AND pushed_sw_appointment_id IS NULL
@@ -328,6 +333,26 @@ export async function stampInternalWebsiteBookingPush(bookingId: string, swAppoi
     pushedSwAppointmentId: String(row.pushedSwAppointmentId),
     pushedAt: toIsoString(row.pushedAt) ?? "",
   };
+}
+
+/**
+ * Store (or replace) the Service Writer management token for an
+ * already-stamped booking. The token can legitimately arrive after
+ * the stamp itself — Service Writer re-sends the stamp once it has
+ * minted the token — so the idempotent re-stamp path calls this.
+ */
+export async function storeInternalWebsiteBookingSwManagementToken(bookingId: string, managementToken: string) {
+  const sql = getSql();
+  const rows = (await sql`
+    UPDATE moms_ops.bookings
+    SET sw_management_token = ${managementToken},
+        updated_at = now()
+    WHERE id = ${bookingId}::uuid
+      AND pushed_sw_appointment_id IS NOT NULL
+      AND sw_management_token IS DISTINCT FROM ${managementToken}
+    RETURNING id
+  `) as unknown as Array<{ id: string }>;
+  return rows.length > 0;
 }
 
 /**
